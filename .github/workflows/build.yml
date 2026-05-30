@@ -19,28 +19,18 @@ jobs:
           sed -i 's|<string name="omni_app_name">[^<]*</string>|<string name="omni_app_name">eques.ai</string>|' app/src/main/res/values/strings.xml
           sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">eques.ai</string>|' app/src/main/res/values/strings.xml
           grep -rl "Omnibot\|OmniBot\|omnibot" ui/lib/ --include="*.dart" | while read f; do sed -i 's/Omnibot/eques.ai/g' "$f"; sed -i 's/OmniBot/eques.ai/g' "$f"; done
-          sed -i 's/^name: .*/name: eques_ai/' ui/pubspec.yaml
       - name: Generate icon
         run: |
-          python3 -c "
-          import struct,zlib,os,glob
-          def make_png(w,h):
-            cx,cy=w//2,h//2;R=min(w,h)*0.42;raw=b''
-            for y in range(h):
-              raw+=b'\x00'
-              for x in range(w):
-                d=((x-cx)**2+(y-cy)**2)**0.5
-                if d<=R:
-                  t=d/R;raw+=struct.pack('BBBB',int(20+30*t),int(80+100*t),int(180+60*t),255)
-                else:
-                  raw+=struct.pack('BBBB',0,0,0,0)
-            def chunk(tag,data):
-              return struct.pack('>I',len(data))+tag+data+struct.pack('>I',zlib.crc32(tag+data)&0xffffffff)
-            return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
-          sizes={'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
-          [(__import__('os').makedirs('source/app/src/main/res/'+f,exist_ok=True),open('source/app/src/main/res/'+f+'/ic_launcher.png','wb').write(make_png(s,s)),open('source/app/src/main/res/'+f+'/ic_launcher_round.png','wb').write(make_png(s,s))) for f,s in sizes.items()]
-          [os.remove(x) for x in glob.glob('source/app/src/main/res/mipmap-anydpi-v26/*.xml')]
-          print('Icones OK')"
+          python3 -c "import struct,zlib,os,glob
+def make_png(w,h):
+ cx,cy=w//2,h//2;R=min(w,h)*0.42;raw=b''
+ [raw:=raw+b'\x00'+b''.join(struct.pack('BBBB',int(20+30*(((x-cx)**2+(y-cy)**2)**0.5/R)),int(80+100*(((x-cx)**2+(y-cy)**2)**0.5/R)),int(180+60*(((x-cx)**2+(y-cy)**2)**0.5/R)),255) if ((x-cx)**2+(y-cy)**2)**0.5<=R else struct.pack('BBBB',0,0,0,0) for x in range(w)) for y in range(h)]
+ def chunk(t,d):return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+ return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+sizes={'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+[os.makedirs('source/app/src/main/res/'+f,exist_ok=True) or open('source/app/src/main/res/'+f+'/ic_launcher.png','wb').write(make_png(s,s)) for f,s in sizes.items()]
+[os.remove(x) for x in glob.glob('source/app/src/main/res/mipmap-anydpi-v26/*.xml')]
+print('OK')"
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
