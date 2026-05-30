@@ -13,125 +13,85 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: eques-repo
-        
+
       - name: Clone original OpenOmniBot source
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
-          ls -la source/
-          
+          echo "Source cloned successfully"
+
       - name: Apply EQUES modifications
         run: |
-          # Change app name in strings.xml
           sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">EQUES</|' source/app/src/main/res/values/strings.xml
           sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">EQUES</|' source/app/src/main/res/values/strings.xml
-          grep -A1 'app_name|omni_app_name' source/app/src/main/res/values/strings.xml
-          
-      - name: Generate EQUES icon
+          echo "=== Modified strings.xml ==="
+          grep -A1 'app_name\|omni_app_name' source/app/src/main/res/values/strings.xml
+
+      - name: Generate icon
         run: |
-          # Generate all icon sizes using Python
-          python3 -c "
-import struct, zlib, os
+          python3 << 'PYEOF'
+          import struct, zlib, os
 
-def create_png(width, height, bg_color, text='E', fg_color=(255,255,255), font_ratio=0.6):
-    # Simple PNG generator - creates a circle with letter
-    cx, cy = width // 2, height // 2
-    radius = min(width, height) * 0.4
-    pixels = []
-    for y in range(height):
-        row = []
-        for x in range(width):
-            dx, dy = x - cx, y - cy
-            dist = (dx*dx + dy*dy) ** 0.5
-            if dist <= radius:
-                # Inside circle - gradient effect
-                ratio = dist / radius
-                r = int(bg_color[0] + (fg_color[0] - bg_color[0]) * ratio * 0.3)
-                g = int(bg_color[1] + (fg_color[1] - bg_color[1]) * ratio * 0.3)
-                b = int(bg_color[2] + (fg_color[2] - bg_color[2]) * ratio * 0.3)
-                row.extend([r, g, b, 255])
-            else:
-                row.extend([0, 0, 0, 0])  # transparent
-        pixels.append(bytes(row))
-    
-    # Build PNG
-    raw = b''
-    for row in pixels:
-        raw += b'\x00' + row  # filter byte + row
-    
-    def chunk(chunk_type, data):
-        c = chunk_type + data
-        crc = struct.pack('>I', zlib.crc32(c) & 0xffffffff)
-        return struct.pack('>I', len(data)) + c + crc
-    
-    ihdr = struct.pack('>IIBBBBB', width, height, 8, 6, 0, 0, 0)  # RGBA
-    return (b'\x89PNG\r\n\x1a\n' +
-            chunk(b'IHDR', ihdr) +
-            chunk(b'IDAT', zlib.compress(raw)) +
-            chunk(b'IEND', b''))
+          def create_png(w, h, bg, fg):
+              cx, cy = w//2, h//2
+              r = min(w,h)*0.4
+              raw = b''
+              for y in range(h):
+                  raw += b'\x00'
+                  for x in range(w):
+                      dx, dy = x-cx, y-cy
+                      d = (dx*dx+dy*dy)**0.5
+                      if d <= r:
+                          ratio = d/r
+                          rr = int(bg[0]+(fg[0]-bg[0])*ratio*0.3)
+                          gg = int(bg[1]+(fg[1]-bg[1])*ratio*0.3)
+                          bb = int(bg[2]+(fg[2]-bg[2])*ratio*0.3)
+                          raw += struct.pack('BBBB', rr, gg, bb, 255)
+                      else:
+                          raw += struct.pack('BBBB', 0, 0, 0, 0)
 
-# Navy blue color for EQUES - authoritative
-bg = (25, 35, 75)  # Dark navy
-fg = (200, 215, 255)  # Light blue-white
+              def chunk(t, d):
+                  c = t+d
+                  return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c)&0xffffffff)
 
-sizes = {
-    'mipmap-mdpi': 48,
-    'mipmap-hdpi': 72,
-    'mipmap-xhdpi': 96,
-    'mipmap-xxhdpi': 144,
-    'mipmap-xxxhdpi': 192,
-}
+              ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
+              return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
 
-for folder, size in sizes.items():
-    dir_path = f'source/app/src/main/res/{folder}'
-    os.makedirs(dir_path, exist_ok=True)
-    png_data = create_png(size, size, bg, 'E', fg)
-    with open(f'{dir_path}/ic_launcher.png', 'wb') as f:
-        f.write(png_data)
-    with open(f'{dir_path}/ic_launcher_round.png', 'wb') as f:
-        f.write(png_data)
-    print(f'Created icon {size}x{size} in {folder}')
+          bg = (25, 35, 75)
+          fg = (200, 215, 255)
+          sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
 
-# Create adaptive icon XML
-for folder in ['mipmap-anydpi-v26']:
-    dir_path = f'source/app/src/main/res/{folder}'
-    os.makedirs(dir_path, exist_ok=True)
-    with open(f'{dir_path}/ic_launcher.xml', 'w') as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n')
-        f.write('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n')
-        f.write('  <background android:drawable="@color/eques_navy"/>\n')
-        f.write('  <foreground android:drawable="@mipmap/ic_launcher"/>\n')
-        f.write('</adaptive-icon>\n')
-    # Also create round version
-    with open(f'{dir_path}/ic_launcher_round.xml', 'w') as f:
-        f.write('<?xml version="1.0" encoding="utf-8"?>\n')
-        f.write('<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n')
-        f.write('  <background android:drawable="@color/eques_navy"/>\n')
-        f.write('  <foreground android:drawable="@mipmap/ic_launcher_round"/>\n')
-        f.write('</adaptive-icon>\n')
+          for folder, size in sizes.items():
+              d = f'source/app/src/main/res/{folder}'
+              os.makedirs(d, exist_ok=True)
+              p = create_png(size, size, bg, fg)
+              open(f'{d}/ic_launcher.png','wb').write(p)
+              open(f'{d}/ic_launcher_round.png','wb').write(p)
+              print(f'Icon {size}x{size} -> {folder}')
 
-# Create color resource
-colors_dir = 'source/app/src/main/res/values'
-os.makedirs(colors_dir, exist_ok=True)
-with open(f'{colors_dir}/eques_colors.xml', 'w') as f:
-    f.write('<?xml version="1.0" encoding="utf-8"?>\n')
-    f.write('<resources>\n')
-    f.write('  <color name="eques_navy">#FF19234B</color>\n')
-    f.write('</resources>\n')
+          d = 'source/app/src/main/res/mipmap-anydpi-v26'
+          os.makedirs(d, exist_ok=True)
+          for name in ['ic_launcher', 'ic_launcher_round']:
+              with open(f'{d}/{name}.xml','w') as f:
+                  f.write('<?xml version="1.0"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@color/eques_navy"/>\n  <foreground android:drawable="@mipmap/'+name+'"/>\n</adaptive-icon>')
 
-print('Icon generation complete!')
-"
-          
+          d = 'source/app/src/main/res/values'
+          os.makedirs(d, exist_ok=True)
+          with open(f'{d}/eques_colors.xml','w') as f:
+              f.write('<?xml version="1.0"?>\n<resources><color name="eques_navy">#FF19234B</color></resources>')
+          print('Icon generation complete!')
+          PYEOF
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
-          
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.27.0'
-          
+
       - name: Build APK
         working-directory: source
         run: |
@@ -139,7 +99,7 @@ print('Icon generation complete!')
           flutter pub get
           cd ..
           ./gradlew :app:assembleDevelopStandardDebug
-          
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
