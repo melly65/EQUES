@@ -16,56 +16,31 @@ jobs:
       - name: Apply EQUES name
         run: |
           cd source
-          sed -i 's/[^<]/eques.ai/' app/src/main/res/values/strings.xml
-          sed -i 's/[^<]/eques.ai/' app/src/main/res/values/strings.xml
-          grep -rl "Omnibot|OmniBot|omnibot" ui/lib/ --include="*.dart" | while read f; do
-            sed -i "s/Hi, I'm Omnibot/Hi, I'm eques.ai/g" "$f"
-            sed -i "s/Hi, I'm OmniBot/Hi, I'm eques.ai/g" "$f"
-            sed -i 's/"Omnibot"/"eques.ai"/g' "$f"
-            sed -i 's/"OmniBot"/"eques.ai"/g' "$f"
-            sed -i 's/Omnibot/eques.ai/g' "$f"
-            sed -i 's/OmniBot/eques.ai/g' "$f"
-          done
+          sed -i 's|<string name="omni_app_name">[^<]*</string>|<string name="omni_app_name">eques.ai</string>|' app/src/main/res/values/strings.xml
+          sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">eques.ai</string>|' app/src/main/res/values/strings.xml
+          grep -rl "Omnibot\|OmniBot\|omnibot" ui/lib/ --include="*.dart" | while read f; do sed -i 's/Omnibot/eques.ai/g' "$f"; sed -i 's/OmniBot/eques.ai/g' "$f"; done
           sed -i 's/^name: .*/name: eques_ai/' ui/pubspec.yaml
       - name: Generate icon
         run: |
-          python3 << 'PYEOF'
-import struct, zlib, os, glob
-
-def make_png(w, h):
-    cx, cy = w // 2, h // 2
-    R = min(w, h) * 0.42
-    raw = b''
-    for y in range(h):
-        raw += b'\x00'
-        for x in range(w):
-            d = ((x - cx) ** 2 + (y - cy) ** 2) ** 0.5
-            if d <= R:
-                t = d / R
-                r = int(20 + 30 * t)
-                g = int(80 + 100 * t)
-                b = int(180 + 60 * t)
-                raw += struct.pack('BBBB', r, g, b, 255)
-            else:
-                raw += struct.pack('BBBB', 0, 0, 0, 0)
-    def chunk(tag, data):
-        return struct.pack('>I', len(data)) + tag + data + struct.pack('>I', zlib.crc32(tag + data) & 0xffffffff)
-    return (b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b''))
-
-sizes = {'mipmap-mdpi': 48, 'mipmap-hdpi': 72, 'mipmap-xhdpi': 96, 'mipmap-xxhdpi': 144, 'mipmap-xxxhdpi': 192}
-for folder, size in sizes.items():
-    path = f'source/app/src/main/res/{folder}'
-    os.makedirs(path, exist_ok=True)
-    png_data = make_png(size, size)
-    open(f'{path}/ic_launcher.png', 'wb').write(png_data)
-    open(f'{path}/ic_launcher_round.png', 'wb').write(png_data)
-
-for xml_file in glob.glob('source/app/src/main/res/mipmap-anydpi-v26/*.xml'):
-    os.remove(xml_file)
-    print(f'Removido: {xml_file}')
-
-print('Icones OK')
-PYEOF
+          python3 -c "
+          import struct,zlib,os,glob
+          def make_png(w,h):
+            cx,cy=w//2,h//2;R=min(w,h)*0.42;raw=b''
+            for y in range(h):
+              raw+=b'\x00'
+              for x in range(w):
+                d=((x-cx)**2+(y-cy)**2)**0.5
+                if d<=R:
+                  t=d/R;raw+=struct.pack('BBBB',int(20+30*t),int(80+100*t),int(180+60*t),255)
+                else:
+                  raw+=struct.pack('BBBB',0,0,0,0)
+            def chunk(tag,data):
+              return struct.pack('>I',len(data))+tag+data+struct.pack('>I',zlib.crc32(tag+data)&0xffffffff)
+            return b'\x89PNG\r\n\x1a\n'+chunk(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+chunk(b'IDAT',zlib.compress(raw))+chunk(b'IEND',b'')
+          sizes={'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
+          [(__import__('os').makedirs('source/app/src/main/res/'+f,exist_ok=True),open('source/app/src/main/res/'+f+'/ic_launcher.png','wb').write(make_png(s,s)),open('source/app/src/main/res/'+f+'/ic_launcher_round.png','wb').write(make_png(s,s))) for f,s in sizes.items()]
+          [os.remove(x) for x in glob.glob('source/app/src/main/res/mipmap-anydpi-v26/*.xml')]
+          print('Icones OK')"
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -79,10 +54,7 @@ PYEOF
       - name: Build APK
         working-directory: source
         run: |
-          cd ui
-          flutter pub get
-          cd ..
-          ./gradlew :app:assembleDevelopStandardDebug
+          cd ui && flutter pub get && cd .. && ./gradlew :app:assembleDevelopStandardDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
