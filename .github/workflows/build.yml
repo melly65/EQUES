@@ -34,12 +34,6 @@ jobs:
           for f,s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
             d='source/app/src/main/res/'+f;os.makedirs(d,exist_ok=True);p=png(s,s)
             open(d+'/ic_launcher.png','wb').write(p);open(d+'/ic_launcher_round.png','wb').write(p)
-          import os as _o
-          _o.makedirs('source/app/src/main/res/mipmap-anydpi-v26',exist_ok=True)
-          for n in['ic_launcher','ic_launcher_round']:
-            f=open('source/app/src/main/res/mipmap-anydpi-v26/'+n+'.xml','w');f.write('<?xml version="1.0"?><adaptive-icon><background android:drawable="@color/eques_navy"/><foreground android:drawable="@mipmap/'+n+'"/></adaptive-icon>');f.close()
-          _o.makedirs('source/app/src/main/res/values',exist_ok=True)
-          f=open('source/app/src/main/res/values/eques_colors.xml','w');f.write('<?xml version="1.0"?><resources><color name="eques_navy">#FF19234B</color></resources>');f.close()
           print('Icon OK')
           PYEOF
       - name: Setup Java
