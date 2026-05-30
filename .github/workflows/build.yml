@@ -9,8 +9,28 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      
+      - name: Checkout EQUES repo
+        uses: actions/checkout@v4
+        with:
+          path: eques-repo
+        
+      - name: Clone original OpenOmniBot source
+        run: |
+          git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
+          ls -la source/
+          
+      - name: Apply EQUES modifications
+        run: |
+          # Change app name in strings.xml
+          sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">EQUES</|' source/app/src/main/res/values/strings.xml
+          sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">EQUES</|' source/app/src/main/res/values/strings.xml
+          
+          # Add EQUES branding file
+          echo "EQUES - Seu assistente pessoal on-device" > source/BRANDING.md
+          
+          echo "=== Modified strings.xml ==="
+          grep -A1 'app_name|omni_app_name' source/app/src/main/res/values/strings.xml
+          
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -22,12 +42,8 @@ jobs:
         with:
           flutter-version: '3.27.0'
           
-      - name: Modify app name to EQUES
-        run: |
-          sed -i 's/<string name="omni_app_name">[^<]*</<string name="omni_app_name">EQUES</' app/src/main/res/values/strings.xml
-          sed -i 's/<string name="app_name">[^<]*</<string name="app_name">EQUES</' app/src/main/res/values/strings.xml
-          
       - name: Build APK
+        working-directory: source
         run: |
           cd ui
           flutter pub get
@@ -38,4 +54,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: EQUES-APK
-          path: app/build/outputs/apk/developStandard/debug/*.apk
+          path: source/app/build/outputs/apk/developStandard/debug/*.apk
