@@ -1,0 +1,41 @@
+name: Build EQUES APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+          
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.27.0'
+          
+      - name: Modify app name to EQUES
+        run: |
+          sed -i 's/<string name="omni_app_name">[^<]*</<string name="omni_app_name">EQUES</' app/src/main/res/values/strings.xml
+          sed -i 's/<string name="app_name">[^<]*</<string name="app_name">EQUES</' app/src/main/res/values/strings.xml
+          
+      - name: Build APK
+        run: |
+          cd ui
+          flutter pub get
+          cd ..
+          ./gradlew :app:assembleDevelopStandardDebug
+          
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: EQUES-APK
+          path: app/build/outputs/apk/developStandard/debug/*.apk
