@@ -9,28 +9,24 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout EQUES repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           path: eques-repo
 
       - name: Clone original OpenOmniBot source
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
-          echo "Source cloned successfully"
 
       - name: Apply EQUES modifications
         run: |
           sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">EQUES</|' source/app/src/main/res/values/strings.xml
           sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">EQUES</|' source/app/src/main/res/values/strings.xml
-          echo "=== Modified strings.xml ==="
           grep -A1 'app_name\|omni_app_name' source/app/src/main/res/values/strings.xml
 
       - name: Generate icon
         run: |
           python3 << 'PYEOF'
           import struct, zlib, os
-
           def create_png(w, h, bg, fg):
               cx, cy = w//2, h//2
               r = min(w,h)*0.4
@@ -48,36 +44,24 @@ jobs:
                           raw += struct.pack('BBBB', rr, gg, bb, 255)
                       else:
                           raw += struct.pack('BBBB', 0, 0, 0, 0)
-
               def chunk(t, d):
                   c = t+d
                   return struct.pack('>I', len(d)) + c + struct.pack('>I', zlib.crc32(c)&0xffffffff)
-
               ihdr = struct.pack('>IIBBBBB', w, h, 8, 6, 0, 0, 0)
               return b'\x89PNG\r\n\x1a\n' + chunk(b'IHDR', ihdr) + chunk(b'IDAT', zlib.compress(raw)) + chunk(b'IEND', b'')
-
-          bg = (25, 35, 75)
-          fg = (200, 215, 255)
+          bg = (25, 35, 75); fg = (200, 215, 255)
           sizes = {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}
-
           for folder, size in sizes.items():
-              d = f'source/app/src/main/res/{folder}'
-              os.makedirs(d, exist_ok=True)
+              d = f'source/app/src/main/res/{folder}'; os.makedirs(d, exist_ok=True)
               p = create_png(size, size, bg, fg)
-              open(f'{d}/ic_launcher.png','wb').write(p)
-              open(f'{d}/ic_launcher_round.png','wb').write(p)
-              print(f'Icon {size}x{size} -> {folder}')
-
-          d = 'source/app/src/main/res/mipmap-anydpi-v26'
-          os.makedirs(d, exist_ok=True)
-          for name in ['ic_launcher', 'ic_launcher_round']:
+              open(f'{d}/ic_launcher.png','wb').write(p); open(f'{d}/ic_launcher_round.png','wb').write(p)
+          d = 'source/app/src/main/res/mipmap-anydpi-v26'; os.makedirs(d, exist_ok=True)
+          for name in ['ic_launcher','ic_launcher_round']:
               with open(f'{d}/{name}.xml','w') as f:
-                  f.write('<?xml version="1.0"?>\n<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n  <background android:drawable="@color/eques_navy"/>\n  <foreground android:drawable="@mipmap/'+name+'"/>\n</adaptive-icon>')
-
-          d = 'source/app/src/main/res/values'
-          os.makedirs(d, exist_ok=True)
+                  f.write('<?xml version="1.0"?><adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android"><background android:drawable="@color/eques_navy"/><foreground android:drawable="@mipmap/'+name+'"/></adaptive-icon>')
+          d = 'source/app/src/main/res/values'; os.makedirs(d, exist_ok=True)
           with open(f'{d}/eques_colors.xml','w') as f:
-              f.write('<?xml version="1.0"?>\n<resources><color name="eques_navy">#FF19234B</color></resources>')
+              f.write('<?xml version="1.0"?><resources><color name="eques_navy">#FF19234B</color></resources>')
           print('Icon generation complete!')
           PYEOF
 
@@ -90,7 +74,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.27.0'
+          flutter-version: '3.36.0'
 
       - name: Build APK
         working-directory: source
