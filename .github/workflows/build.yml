@@ -12,12 +12,14 @@ jobs:
           path: melly-repo
       - name: Clone source
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
-      - name: Apply Melly 1.1 name
+      - name: Apply Melly 1.1 branding
         run: |
           cd source
           sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
           sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
-          find . -type f -name "*.dart" -o -name "*.xml" -o -name "*.arb" -o -name "*.html" -o -name "*.json" -o -name "*.kt" -o -name "*.kts" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/OmniBot/Melly 1.1/g; s/小万/Melly 1.1/g; s/OpenOmniBot/Melly 1.1/g' "$f" 2>/dev/null || true; done
+          find . -name "chat_empty_greeting.dart" | while read f; do sed -i "s/Hi 👋, I'm Omnibot/Hi 👋, I'm Melly 1.1/g; s/你好👋，我是小万/你好👋，我是Melly 1.1/g" "$f" 2>/dev/null || true; done
+          find . -name "*.arb" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
+          find . -name "*.html" -o -name "*.json" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
       - name: Generate icon
         run: |
           python3 << 'PYEOF'
