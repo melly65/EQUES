@@ -12,118 +12,60 @@ jobs:
       - name: Clone OpenOmniBot
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
-      - name: Replace branding strings
+      - name: Replace branding
         run: |
           cd source
           sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">Melly 1.1</string>|g' app/src/main/res/values/strings.xml
           sed -i 's|<string name="omni_app_name">[^<]*</string>|<string name="omni_app_name">Melly 1.1</string>|g' app/src/main/res/values/strings.xml
-          find . -type f \( -name "*.dart" -o -name "*.xml" -o -name "*.arb" -o -name "*.html" -o -name "*.json" -o -name "*.kt" -o -name "*.kts" -o -name "*.yaml" \) | while read f; do
-            sed -i 's/Omnibot/Melly 1.1/g; s/OmniBot/Melly 1.1/g; s/omnibot/melly/g; s/OMNIBOT/MELLY/g; s/小万/Melly 1.1/g; s/OpenOmniBot/Melly 1.1/g' "$f" 2>/dev/null || true
-          done
-          find . -type f \( -name "*.kt" -o -name "*.kts" -o -name "*.xml" -o -name "*.dart" -o -name "*.yaml" \) -exec sed -i 's/cn\.com\.omnimind\.bot/com.melly.bot/g' {} + 2>/dev/null || true
-          find . -name "chat_empty_greeting.dart" -exec sed -i "s/Hi 👋, I'm Omnibot/Hi 👋, I'm Melly 1.1/g; s/你好👋，我是小万/你好👋，我是Melly 1.1/g" {} + 2>/dev/null || true
-      - name: Setup Python and generate icon
+          find . -type f -name "*.dart" -o -name "*.xml" -o -name "*.arb" -o -name "*.html" -o -name "*.json" -o -name "*.kt" -o -name "*.kts" -o -name "*.yaml" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/OmniBot/Melly 1.1/g; s/omnibot/melly/g; s/小万/Melly 1.1/g; s/OpenOmniBot/Melly 1.1/g' "$f" 2>/dev/null || true; done
+          find . -type f -name "*.kt" -o -name "*.kts" -o -name "*.xml" -o -name "*.dart" -o -name "*.yaml" | xargs -r sed -i 's/cn\.com\.omnimind\.bot/com.melly.bot/g' 2>/dev/null || true
+          find . -name "chat_empty_greeting.dart" | xargs -r sed -i "s/Hi 👋, I'm Omnibot/Hi 👋, I'm Melly 1.1/g; s/你好👋，我是小万/你好👋，我是Melly 1.1/g" 2>/dev/null || true
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Generate icon
         run: |
           pip install Pillow -q
-          python3 << 'PYEOF'
+          python3 -c "
 from PIL import Image,ImageDraw
-import os, glob
+import os,glob
 for d,s in [('mipmap-mdpi',48),('mipmap-hdpi',72),('mipmap-xhdpi',96),('mipmap-xxhdpi',144),('mipmap-xxxhdpi',192)]:
-  os.makedirs(f'source/app/src/main/res/{d}',exist_ok=True)
-  i=Image.new('RGBA',(s,s),(0,0,0,0))
-  dr=ImageDraw.Draw(i)
-  m=s//8;r=s//4
-  dr.rounded_rectangle([m,m,s-m,s-m],radius=r,fill=(10,10,26,255))
-  dr.rounded_rectangle([m+4,m+4,s-m-4,s-m-4],radius=r-4,fill=(108,60,224,180))
-  try:
-   from PIL import ImageFont
-   f=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',s//3)
-   b=dr.textbbox((0,0),'M',font=f)
-   dr.text(((s-b[2]+b[0])//2,(s-b[3]+b[1])//2-s//12),'M',fill=(0,229,255,255),font=f)
-  except:pass
-  i.save(f'source/app/src/main/res/{d}/ic_launcher.png')
+ os.makedirs(f'source/app/src/main/res/{d}',exist_ok=True)
+ i=Image.new('RGBA',(s,s),(0,0,0,0))
+ dr=ImageDraw.Draw(i)
+ m=s//8;r=s//4
+ dr.rounded_rectangle([m,m,s-m,s-m],radius=r,fill=(10,10,26,255))
+ dr.rounded_rectangle([m+4,m+4,s-m-4,s-m-4],radius=r-4,fill=(108,60,224,180))
+ i.save(f'source/app/src/main/res/{d}/ic_launcher.png')
 for f in glob.glob('source/app/src/main/res/*/ic_launcher_foreground.png')+glob.glob('source/app/src/main/res/*/ic_launcher_background.png'):
-  os.remove(f)
-for f in glob.glob('source/app/src/main/res/mipmap-anydpi-v26/*.xml')+glob.glob('source/app/src/main/res/drawable-anydpi-v26/*.xml'):
-  if os.path.exists(f): os.remove(f)
+ os.remove(f)
 print('Icon done')
-PYEOF
-      - name: Upgrade to DeepSeek V4 Pro
+"
+
+      - name: Upgrade API config
         run: |
           cd source
-          find . -name "*.kt" -exec sed -i 's/"deepseek-chat"/"deepseek-v4-pro"/g; s/"deepseek-v3"/"deepseek-v4-pro"/g; s/maxTokens = 4096/maxTokens = 32768/g; s/maxTokens = 8192/maxTokens = 32768/g' {} + 2>/dev/null || true
-          mkdir -p ui/assets/config
-          cat > ui/assets/config/default_agent_config.json << 'EOF'
-{
-  "model": "deepseek-v4-pro",
-  "model_display": "DeepSeek V4 Pro (1.6T)",
-  "provider": "deepseek",
-  "api_base": "https://api.deepseek.com/v1",
-  "context_window": 1048576,
-  "max_output_tokens": 32768,
-  "temperature": 0.7,
-  "top_p": 0.95,
-  "reasoning_effort": "high",
-  "chain_of_thought": true,
-  "self_reflection": true
-}
-EOF
-
-      - name: Apply Mythos architecture
-        run: |
-          cd source/ui/lib/features
-          mkdir -p agent skills
-          cat > agent/chain_of_thought.dart << 'DART'
-class ChainOfThought {
-  static const bool enabled = true;
-  static const int minReasoningSteps = 3;
-  static const String template = "1. IDENTIFY goal\\n2. ANALYZE approach\\n3. PLAN steps\\n4. VERIFY edge cases\\n5. EXECUTE";
-  static const bool selfReflection = true;
-  static const List<String> checklist = ["Done?","Better way?","Loose ends?","Learn?"];
-}
-class TaskRouter {
-  static bool shouldDispatch(String task) => task.split(' ').length > 15;
-}
-class AntiLoopGuard {
-  static final Map<String,int> _h = {};
-  static bool shouldBreak(String a) { _h[a]=(_h[a]??0)+1; bool b=_h[a]!>3; if(b) _h.clear(); return b; }
-}
-DART
-          cat > skills/skill_activator.dart << 'DART'
-class SkillActivator {
-  static const Map<String,List<String>> triggers = {
-    'git':['git-expert'],'build':['github-actions-debugger'],'bug':['bug-hunter'],
-    'error':['error-doctor'],'test':['qa-tester'],'security':['security-auditor'],
-    'api':['api-integrator'],'whatsapp':['whatsapp-sender'],'web':['web-search'],
-  };
-  static Set<String> detect(String t) => triggers.entries.where((e)=>t.toLowerCase().contains(e.key)).expand((e)=>e.value).toSet();
-}
-DART
-          cat > agent/mythos_core.dart << 'DART'
-import 'chain_of_thought.dart';
-class MythosCore {
-  Future<String> analyze(String task) async => TaskRouter.shouldDispatch(task)? "DISPATCH":"SOLO";
-}
-DART
-          echo "Mythos arch done"
+          find . -name "*.kt" | xargs -r sed -i 's/"deepseek-chat"/"deepseek-v4-pro"/g; s/"deepseek-v3"/"deepseek-v4-pro"/g; s/maxTokens = 4096/maxTokens = 32768/g; s/maxTokens = 8192/maxTokens = 32768/g' 2>/dev/null || true
 
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-      - name: Move source to workspace
+
+      - name: Move source
         run: rsync -a source/ ./
 
-      - name: Build APK debug
-        run: |
-          cd app
-          flutter build apk --debug
+      - name: Build APK
+        run: cd app && flutter build apk --debug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
