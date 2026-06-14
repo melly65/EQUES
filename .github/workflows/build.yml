@@ -1,74 +1,61 @@
 name: Build Melly 1.1 APK
-
 on:
   push:
     branches: [ main ]
   workflow_dispatch:
-
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Clone OpenOmniBot
+      - uses: actions/checkout@v4
+        with:
+          path: melly-repo
+      - name: Clone source
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
-
-      - name: Replace branding
+      - name: Apply Melly 1.1 name
         run: |
           cd source
-          sed -i 's|<string name="app_name">[^<]*</string>|<string name="app_name">Melly 1.1</string>|g' app/src/main/res/values/strings.xml
-          sed -i 's|<string name="omni_app_name">[^<]*</string>|<string name="omni_app_name">Melly 1.1</string>|g' app/src/main/res/values/strings.xml
-          find . -type f -name "*.dart" -o -name "*.xml" -o -name "*.arb" -o -name "*.html" -o -name "*.json" -o -name "*.kt" -o -name "*.kts" -o -name "*.yaml" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/OmniBot/Melly 1.1/g; s/omnibot/melly/g; s/小万/Melly 1.1/g; s/OpenOmniBot/Melly 1.1/g' "$f" 2>/dev/null || true; done
-          find . -type f -name "*.kt" -o -name "*.kts" -o -name "*.xml" -o -name "*.dart" -o -name "*.yaml" | xargs -r sed -i 's/cn\.com\.omnimind\.bot/com.melly.bot/g' 2>/dev/null || true
-          find . -name "chat_empty_greeting.dart" | xargs -r sed -i "s/Hi 👋, I'm Omnibot/Hi 👋, I'm Melly 1.1/g; s/你好👋，我是小万/你好👋，我是Melly 1.1/g" 2>/dev/null || true
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-
+          sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
+          sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
+          find . -type f -name "*.dart" -o -name "*.xml" -o -name "*.arb" -o -name "*.html" -o -name "*.json" -o -name "*.kt" -o -name "*.kts" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/OmniBot/Melly 1.1/g; s/小万/Melly 1.1/g; s/OpenOmniBot/Melly 1.1/g' "$f" 2>/dev/null || true; done
       - name: Generate icon
         run: |
-          pip install Pillow -q
-          python3 -c "
-from PIL import Image,ImageDraw
-import os,glob
-for d,s in [('mipmap-mdpi',48),('mipmap-hdpi',72),('mipmap-xhdpi',96),('mipmap-xxhdpi',144),('mipmap-xxxhdpi',192)]:
- os.makedirs(f'source/app/src/main/res/{d}',exist_ok=True)
- i=Image.new('RGBA',(s,s),(0,0,0,0))
- dr=ImageDraw.Draw(i)
- m=s//8;r=s//4
- dr.rounded_rectangle([m,m,s-m,s-m],radius=r,fill=(10,10,26,255))
- dr.rounded_rectangle([m+4,m+4,s-m-4,s-m-4],radius=r-4,fill=(108,60,224,180))
- i.save(f'source/app/src/main/res/{d}/ic_launcher.png')
-for f in glob.glob('source/app/src/main/res/*/ic_launcher_foreground.png')+glob.glob('source/app/src/main/res/*/ic_launcher_background.png'):
- os.remove(f)
-print('Icon done')
-"
-
-      - name: Upgrade API config
-        run: |
-          cd source
-          find . -name "*.kt" | xargs -r sed -i 's/"deepseek-chat"/"deepseek-v4-pro"/g; s/"deepseek-v3"/"deepseek-v4-pro"/g; s/maxTokens = 4096/maxTokens = 32768/g; s/maxTokens = 8192/maxTokens = 32768/g' 2>/dev/null || true
-
+          python3 << 'PYEOF'
+          import struct, zlib, os
+          def png(w,h):
+            cx,cy=w//2,h//2;R=min(w,h)*0.4;raw=b''
+            for y_ in range(h):
+              raw+=b'\x00'
+              for x_ in range(w):
+                d=((x_-cx)**2+(y_-cy)**2)**0.5
+                if d<=R: r=d/R;raw+=struct.pack('BBBB',int(10+(108-10)*r*0.3),int(10+(60-10)*r*0.3),int(26+(224-26)*r*0.3),255)
+                else: raw+=struct.pack('BBBB',0,0,0,0)
+            def c(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
+            return b'\x89PNG\r\n\x1a\n'+c(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+c(b'IDAT',zlib.compress(raw))+c(b'IEND',b'')
+          for f,s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
+            d='source/app/src/main/res/'+f;os.makedirs(d,exist_ok=True);p=png(s,s)
+            open(d+'/ic_launcher.png','wb').write(p);open(d+'/ic_launcher_round.png','wb').write(p)
+          print('Icon OK')
+          PYEOF
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
+          distribution: temurin
           java-version: '17'
-          distribution: 'temurin'
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           cache: true
-
-      - name: Move source
-        run: rsync -a source/ ./
-
       - name: Build APK
-        run: cd app && flutter build apk --debug
-
+        working-directory: source
+        run: |
+          cd ui
+          flutter pub get
+          cd ..
+          ./gradlew :app:assembleDevelopStandardDebug
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
-          path: app/build/app/outputs/flutter-apk/app-debug.apk
+          path: source/app/build/outputs/apk/developStandard/debug/*.apk
