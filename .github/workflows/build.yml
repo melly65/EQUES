@@ -7,19 +7,14 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: melly-repo
       - name: Clone source
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
       - name: Apply Melly 1.1 branding
         run: |
           cd source
-          sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
-          sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml
-          find . -name "chat_empty_greeting.dart" | while read f; do sed -i "s/Hi 👋, I'm Omnibot/Hi 👋, I'm Melly 1.1/g; s/你好👋，我是小万/你好👋，我是Melly 1.1/g" "$f" 2>/dev/null || true; done
-          find . -name "*.arb" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
-          find . -name "*.html" -o -name "*.json" | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
+          sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
+          sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
+          find . \( -name "chat_empty_greeting.dart" -o -name "*.arb" -o -name "*.html" -o -name "*.json" \) | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
       - name: Generate icon
         run: |
           python3 << 'PYEOF'
@@ -49,15 +44,17 @@ jobs:
         with:
           channel: stable
           cache: true
+      - name: Flutter pub get
+        working-directory: source/ui
+        run: flutter pub get
       - name: Build APK
         working-directory: source
         run: |
-          cd ui
-          flutter pub get
-          cd ..
-          ./gradlew :app:assembleDevelopStandardDebug
+          chmod +x gradlew
+          ./gradlew :app:assembleDevelopStandardDebug --stacktrace
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
           path: source/app/build/outputs/apk/developStandard/debug/*.apk
+          if-no-files-found: error
