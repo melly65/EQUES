@@ -1,58 +1,185 @@
-name: Build Melly 1.1 APK
+name: Build Melly APK
+
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
   workflow_dispatch:
+
 jobs:
   build:
+
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout melly repo
-        run: git clone --depth 1 https://github.com/melly65/EQUES.git melly-repo
-      - name: Clone source
-        run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
-      - name: Apply Melly 1.1 branding
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+
+      - name: Clone Melly assets
         run: |
-          cd source
-          find . \( -name "*.kt" -o -name "*.java" -o -name "*.dart" -o -name "*.arb" -o -name "*.html" -o -name "*.json" \) | xargs grep -rl "Omnibot\|小万" 2>/dev/null | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
-          sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
-          sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
-      - name: Install imagemagick
-        run: sudo apt-get install -y imagemagick
-      - name: Generate icons from custom image
+          git clone --depth 1 https://github.com/melly65/EQUES.git melly-repo
+
+
+      - name: Clone OpenOmniBot source
         run: |
-          SOURCE=$(find melly-repo -name "*.png" | head -1)
-          echo "Icone encontrado: $SOURCE"
-          if [ -z "$SOURCE" ]; then echo "ERRO: nenhum PNG" && exit 1; fi
-          for folder in mipmap-mdpi:48 mipmap-hdpi:72 mipmap-xhdpi:96 mipmap-xxhdpi:144 mipmap-xxxhdpi:192; do
-            name="${folder%%:*}"; size="${folder##*:}"
-            dir="source/app/src/main/res/$name"
-            mkdir -p "$dir"
-            convert "$SOURCE" -resize "${size}x${size}" "$dir/ic_launcher.png"
-            convert "$SOURCE" -resize "${size}x${size}" "$dir/ic_launcher_round.png"
+          git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
+
+
+      - name: Apply Melly branding
+        working-directory: source
+        run: |
+          find . \
+          \( -name "*.kt" -o -name "*.java" -o -name "*.dart" \
+          -o -name "*.arb" -o -name "*.html" \
+          -o -name "*.json" -o -name "*.xml" \) \
+          -type f -print0 |
+          xargs -0 sed -i \
+          -e 's/OmniBot/Melly/g' \
+          -e 's/Omnibot/Melly/g' \
+          -e 's/omnibot/melly/g' \
+          -e 's/omnimind/Melly/g' \
+          -e 's/小万/Melly/g' || true
+
+
+          find . -name "strings.xml" -type f -exec sed -i \
+          's/<string name="app_name">.*<\/string>/<string name="app_name">Melly<\/string>/g' {} \;
+
+
+          find . -name "AndroidManifest.xml" -type f -exec sed -i \
+          's/android:label="[^"]*"/android:label="Melly"/g' {} \;
+
+
+      - name: Install ImageMagick
+        run: |
+          sudo apt update
+          sudo apt install -y imagemagick
+
+
+      - name: Prepare Melly icon
+        run: |
+
+          ICON=$(find melly-repo -type f \
+          \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) | head -n 1)
+
+
+          if [ -z "$ICON" ]; then
+            echo "ERRO: nenhuma imagem encontrada"
+            exit 1
+          fi
+
+
+          echo "Imagem usada: $ICON"
+
+
+          mkdir -p prepared
+
+
+          # Cria ícone quadrado 1024x1024 mantendo proporção
+          magick "$ICON" \
+          -resize 1024x1024 \
+          -gravity center \
+          -background none \
+          -extent 1024x1024 \
+          prepared/melly_icon.png
+
+
+          echo "Icone preparado:"
+          identify prepared/melly_icon.png
+
+
+
+      - name: Generate Android launcher icons
+        run: |
+
+          ICON="prepared/melly_icon.png"
+
+
+          for item in \
+          "mipmap-mdpi 48" \
+          "mipmap-hdpi 72" \
+          "mipmap-xhdpi 96" \
+          "mipmap-xxhdpi 144" \
+          "mipmap-xxxhdpi 192"
+
+          do
+
+            folder=$(echo $item | cut -d' ' -f1)
+            size=$(echo $item | cut -d' ' -f2)
+
+
+            mkdir -p source/app/src/main/res/$folder
+
+
+            magick "$ICON" \
+            -resize ${size}x${size} \
+            source/app/src/main/res/$folder/ic_launcher.png
+
+
+            cp source/app/src/main/res/$folder/ic_launcher.png \
+            source/app/src/main/res/$folder/ic_launcher_round.png
+
+
           done
-          find source/app/src/main/res/mipmap-anydpi-v26 -name "ic_launcher*.xml" -delete 2>/dev/null || true
+
+
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'
+          java-version: 17
+          cache: gradle
+
+
+
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.24.0'
+          flutter-version: 3.32.0
           cache: true
-      - name: Flutter pub get
+
+
+
+      - name: Flutter dependencies
         working-directory: source/ui
-        run: flutter pub get
-      - name: Build APK
+        run: |
+          flutter pub get
+
+
+
+      - name: Gradle permission
         working-directory: source
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDevelopStandardDebug --stacktrace --android-skip-build-dependency-validation
+
+
+
+      - name: Build APK
+        working-directory: source
+        run: |
+
+          ./gradlew clean
+
+          ./gradlew assembleDebug \
+          --stacktrace \
+          --no-daemon \
+          --android-skip-build-dependency-validation
+
+
+
+      - name: Find APK
+        run: |
+          echo "APKs encontrados:"
+          find source -name "*.apk"
+
+
+
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Melly-1.1-debug
-          path: source/app/build/outputs/apk/developStandard/debug/*.apk
+          name: Melly-debug-apk
+          path: |
+            source/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
