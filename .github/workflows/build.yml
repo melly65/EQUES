@@ -21,8 +21,9 @@ jobs:
         run: sudo apt-get install -y imagemagick
       - name: Generate icons from custom image
         run: |
-          find melly-repo -name "*.png" | head -1 | xargs -I{} cp {} melly-repo/assets/melly_icon.png 2>/dev/null || true
-          SOURCE="melly-repo/assets/melly_icon.png"
+          SOURCE=$(find melly-repo -name "*.png" | head -1)
+echo "Icone encontrado: $SOURCE"
+if [ -z "$SOURCE" ]; then echo "ERRO: nenhum PNG" && exit 1; fi
           for folder in mipmap-mdpi:48 mipmap-hdpi:72 mipmap-xhdpi:96 mipmap-xxhdpi:144 mipmap-xxxhdpi:192; do
             name="${folder%%:*}"; size="${folder##*:}"
             dir="source/app/src/main/res/$name"
