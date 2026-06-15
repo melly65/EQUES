@@ -7,9 +7,8 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          path: melly-repo
+      - name: Checkout melly repo
+        run: git clone --depth 1 https://github.com/melly65/EQUES.git melly-repo
       - name: Clone source
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
       - name: Apply Melly 1.1 branding
