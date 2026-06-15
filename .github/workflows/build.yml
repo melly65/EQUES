@@ -6,6 +6,7 @@ on:
       - main
   workflow_dispatch:
 
+
 jobs:
   build:
 
@@ -13,8 +14,10 @@ jobs:
 
     steps:
 
+
       - name: Checkout
         uses: actions/checkout@v4
+
 
 
       - name: Clone Melly assets
@@ -22,33 +25,50 @@ jobs:
           git clone --depth 1 https://github.com/melly65/EQUES.git melly-repo
 
 
+
       - name: Clone OpenOmniBot source
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
 
+
       - name: Apply Melly branding
         working-directory: source
         run: |
+
+          echo "Aplicando identidade Melly..."
+
           find . \
-          \( -name "*.kt" -o -name "*.java" -o -name "*.dart" \
-          -o -name "*.arb" -o -name "*.html" \
-          -o -name "*.json" -o -name "*.xml" \) \
-          -type f -print0 |
+          -type f \
+          \( -name "*.kt" \
+          -o -name "*.java" \
+          -o -name "*.dart" \
+          -o -name "*.xml" \
+          -o -name "*.json" \
+          -o -name "*.arb" \
+          -o -name "*.html" \
+          -o -name "*.gradle" \) \
+          -print0 |
           xargs -0 sed -i \
-          -e 's/OmniBot/Melly/g' \
+          -e 's/OpenOmniBot/Melly 1.1/g' \
+          -e 's/OpenOmni/Melly/g' \
+          -e 's/OmniBot/Melly 1.1/g' \
           -e 's/Omnibot/Melly/g' \
           -e 's/omnibot/melly/g' \
           -e 's/omnimind/Melly/g' \
-          -e 's/小万/Melly/g' || true
+          -e 's/小万/Melly/g' \
+          || true
 
-
-          find . -name "strings.xml" -type f -exec sed -i \
-          's/<string name="app_name">.*<\/string>/<string name="app_name">Melly<\/string>/g' {} \;
 
 
           find . -name "AndroidManifest.xml" -type f -exec sed -i \
-          's/android:label="[^"]*"/android:label="Melly"/g' {} \;
+          's/android:label="[^"]*"/android:label="Melly 1.1"/g' {} \;
+
+
+
+          find . -name "strings.xml" -type f -exec sed -i \
+          's/<string name="app_name">.*<\/string>/<string name="app_name">Melly 1.1<\/string>/g' {} \;
+
 
 
       - name: Install ImageMagick
@@ -57,36 +77,37 @@ jobs:
           sudo apt install -y imagemagick
 
 
+
       - name: Prepare Melly icon
         run: |
 
-          ICON=$(find melly-repo -type f \
-          \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) | head -n 1)
+          ICON=$(find melly-repo \
+          -type f \
+          \( -iname "*.png" -o -iname "*.jpg" -o -iname "*.jpeg" \) \
+          | head -n 1)
+
 
 
           if [ -z "$ICON" ]; then
-            echo "ERRO: nenhuma imagem encontrada"
+            echo "Nenhuma imagem encontrada"
             exit 1
           fi
 
 
-          echo "Imagem usada: $ICON"
+          echo "Imagem usada:"
+          echo "$ICON"
 
 
           mkdir -p prepared
 
 
-          # Cria ícone quadrado 1024x1024 mantendo proporção
-          magick "$ICON" \
+
+          convert "$ICON" \
           -resize 1024x1024 \
           -gravity center \
           -background none \
           -extent 1024x1024 \
           prepared/melly_icon.png
-
-
-          echo "Icone preparado:"
-          identify prepared/melly_icon.png
 
 
 
@@ -105,20 +126,24 @@ jobs:
 
           do
 
-            folder=$(echo $item | cut -d' ' -f1)
-            size=$(echo $item | cut -d' ' -f2)
+          folder=$(echo $item | cut -d' ' -f1)
+          size=$(echo $item | cut -d' ' -f2)
 
 
-            mkdir -p source/app/src/main/res/$folder
+
+          mkdir -p source/app/src/main/res/$folder
 
 
-            magick "$ICON" \
-            -resize ${size}x${size} \
-            source/app/src/main/res/$folder/ic_launcher.png
+
+          convert "$ICON" \
+          -resize ${size}x${size} \
+          source/app/src/main/res/$folder/ic_launcher.png
 
 
-            cp source/app/src/main/res/$folder/ic_launcher.png \
-            source/app/src/main/res/$folder/ic_launcher_round.png
+
+          cp source/app/src/main/res/$folder/ic_launcher.png \
+          source/app/src/main/res/$folder/ic_launcher_round.png
+
 
 
           done
@@ -142,7 +167,7 @@ jobs:
 
 
 
-      - name: Flutter dependencies
+      - name: Flutter pub get
         working-directory: source/ui
         run: |
           flutter pub get
@@ -162,6 +187,7 @@ jobs:
 
           ./gradlew clean
 
+
           ./gradlew assembleDebug \
           --stacktrace \
           --no-daemon \
@@ -169,9 +195,8 @@ jobs:
 
 
 
-      - name: Find APK
+      - name: Show APK files
         run: |
-          echo "APKs encontrados:"
           find source -name "*.apk"
 
 
@@ -179,7 +204,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Melly-debug-apk
+          name: Melly-1.1-debug
           path: |
             source/**/build/outputs/apk/**/*.apk
           if-no-files-found: error
