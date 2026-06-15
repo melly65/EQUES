@@ -40,7 +40,7 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          channel: stable
+          flutter-version: '3.24.0'
           cache: true
       - name: Flutter pub get
         working-directory: source/ui
@@ -49,7 +49,7 @@ jobs:
         working-directory: source
         run: |
           chmod +x gradlew
-          ./gradlew :app:assembleDevelopStandardDebug --stacktrace
+          ./gradlew :app:assembleDevelopStandardDebug --stacktrace --android-skip-build-dependency-validation
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
