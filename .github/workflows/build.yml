@@ -28,18 +28,21 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
-      - name: Validate project structure
+      - name: Detect Flutter Project
         run: |
-          test -d source || exit 1
+          PUBSPEC=$(find source -name pubspec.yaml | head -1)
 
-          if [ -d source/ui ]; then
-            echo "FLUTTER_DIR=source/ui" >> $GITHUB_ENV
-          elif [ -f source/pubspec.yaml ]; then
-            echo "FLUTTER_DIR=source" >> $GITHUB_ENV
-          else
-            echo "Flutter project not found"
+          if [ -z "$PUBSPEC" ]; then
+            echo "pubspec.yaml not found"
             exit 1
           fi
+
+          FLUTTER_DIR=$(dirname "$PUBSPEC")
+
+          echo "FLUTTER_DIR=$FLUTTER_DIR" >> $GITHUB_ENV
+
+          echo "Flutter project detected:"
+          echo "$FLUTTER_DIR"
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -55,36 +58,53 @@ jobs:
           cache: true
 
       - name: Flutter Doctor
-        run: flutter doctor -v
-
-      - name: Accept Android SDK Licenses
-        run: yes | flutter doctor --android-licenses || true
-
-      - name: Install Android SDK Components
         run: |
-          sdkmanager \
-            "platform-tools" \
-            "platforms;android-34" \
-            "build-tools;34.0.0"
+          flutter doctor -v
+
+      - name: Accept Android Licenses
+        run: |
+          yes | flutter doctor --android-licenses || true
 
       - name: Install ImageMagick
         run: |
           sudo apt-get update
           sudo apt-get install -y imagemagick
 
-      - name: Find application icon
+      - name: Locate Android Resources
+        run: |
+          RES_DIR=$(find "$FLUTTER_DIR" \
+            -path "*/android/app/src/main/res" \
+            | head -1)
+
+          if [ -z "$RES_DIR" ]; then
+            echo "Android resources directory not found"
+            exit 1
+          fi
+
+          echo "RES_DIR=$RES_DIR" >> $GITHUB_ENV
+
+          echo "Android resources:"
+          echo "$RES_DIR"
+
+      - name: Find Icon
         run: |
           ICON=$(find melly-assets \
             -type f \
-            \( -iname "icon.png" \
-            -o -iname "logo.png" \
-            -o -iname "*icon*.png" \) \
+            \( \
+              -iname "icon.png" \
+              -o -iname "logo.png" \
+              -o -iname "*icon*.png" \
+              -o -iname "*.png" \
+            \) \
             | head -1)
 
           if [ -z "$ICON" ]; then
-            echo "No icon found"
+            echo "No icon image found"
             exit 1
           fi
+
+          echo "Using icon:"
+          echo "$ICON"
 
           mkdir -p prepared
 
@@ -95,20 +115,7 @@ jobs:
             -extent 1024x1024 \
             prepared/icon.png
 
-      - name: Locate Android resources
-        run: |
-          RES_DIR=$(find "$FLUTTER_DIR" \
-            -path "*/android/app/src/main/res" \
-            | head -1)
-
-          if [ -z "$RES_DIR" ]; then
-            echo "Android resources folder not found"
-            exit 1
-          fi
-
-          echo "RES_DIR=$RES_DIR" >> $GITHUB_ENV
-
-      - name: Generate launcher icons
+      - name: Generate Launcher Icons
         run: |
           declare -A SIZES=(
             ["mipmap-mdpi"]=48
@@ -133,7 +140,7 @@ jobs:
               "$RES_DIR/$folder/ic_launcher_round.png"
           done
 
-      - name: Create adaptive icon resources
+      - name: Create Adaptive Icons
         run: |
           mkdir -p "$RES_DIR/mipmap-anydpi-v26"
           mkdir -p "$RES_DIR/drawable"
@@ -159,7 +166,7 @@ jobs:
             "$RES_DIR/mipmap-anydpi-v26/ic_launcher.xml" \
             "$RES_DIR/mipmap-anydpi-v26/ic_launcher_round.xml"
 
-      - name: Apply branding safely
+      - name: Apply App Name Branding
         run: |
           STRINGS=$(find "$FLUTTER_DIR" \
             -path "*/android/app/src/main/res/values/strings.xml" \
@@ -169,15 +176,21 @@ jobs:
             sed -i \
               's#<string name="app_name">.*</string>#<string name="app_name">Melly 1.1</string>#' \
               "$STRINGS"
+
+            echo "App name updated"
+          else
+            echo "strings.xml not found, skipping branding"
           fi
 
-      - name: Get Flutter Dependencies
+      - name: Get Dependencies
         working-directory: ${{ env.FLUTTER_DIR }}
-        run: flutter pub get
+        run: |
+          flutter pub get
 
-      - name: Analyze Flutter Project
+      - name: Analyze Project
         working-directory: ${{ env.FLUTTER_DIR }}
-        run: flutter analyze || true
+        run: |
+          flutter analyze || true
 
       - name: Build APK
         working-directory: ${{ env.FLUTTER_DIR }}
@@ -186,13 +199,17 @@ jobs:
 
       - name: Verify APK
         run: |
-          APK=$(find "$FLUTTER_DIR/build/app/outputs/flutter-apk" \
-            -name "*.apk" | head -1)
+          APK=$(find "$FLUTTER_DIR/build" \
+            -name "*.apk" \
+            | head -1)
 
           if [ -z "$APK" ]; then
             echo "APK not generated"
             exit 1
           fi
+
+          echo "APK generated:"
+          echo "$APK"
 
           ls -lh "$APK"
 
@@ -201,5 +218,5 @@ jobs:
         with:
           name: Melly-1.1-debug
           path: |
-            ${{ env.FLUTTER_DIR }}/build/app/outputs/flutter-apk/*.apk
+            ${{ env.FLUTTER_DIR }}/build/**/*.apk
           if-no-files-found: error
