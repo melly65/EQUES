@@ -1,119 +1,45 @@
 name: Build Melly APK
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - main
-  workflow_dispatch:
 
+permissions:
+  contents: read
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
-    steps:
+    env:
+      FLUTTER_VERSION: "3.24.5"
 
+    steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-
-      - name: Clone Melly assets
+      - name: Clone Melly Assets
         run: |
-          git clone --depth 1 https://github.com/melly65/EQUES.git melly-repo
+          git clone --depth 1 https://github.com/melly65/EQUES.git melly-assets
 
-
-      - name: Clone OpenOmniBot source
+      - name: Clone OpenOmniBot
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
-
-      - name: Detect Flutter version
-        working-directory: source/ui
+      - name: Validate project structure
         run: |
-          grep "environment:" -A5 pubspec.yaml || true
+          test -d source || exit 1
 
-
-      - name: Apply Melly branding
-        working-directory: source
-        run: |
-
-          find . \
-          -type f \
-          \( -name "*.kt" \
-          -o -name "*.java" \
-          -o -name "*.dart" \
-          -o -name "*.xml" \
-          -o -name "*.json" \
-          -o -name "*.arb" \
-          -o -name "*.gradle" \) \
-          -print0 |
-          xargs -0 sed -i \
-          -e 's/OpenOmniBot/Melly 1.1/g' \
-          -e 's/OpenOmni/Melly/g' \
-          -e 's/OmniBot/Melly 1.1/g' \
-          -e 's/Omnibot/Melly/g' \
-          -e 's/omnibot/melly/g' \
-          -e 's/omnimind/Melly/g' \
-          -e 's/小万/Melly/g' \
-          || true
-
-
-
-      - name: Install ImageMagick
-        run: |
-          sudo apt update
-          sudo apt install -y imagemagick
-
-
-
-      - name: Prepare icon
-        run: |
-
-          ICON=$(find melly-repo \
-          -type f \
-          \( -iname "*.png" -o -iname "*.jpg" \) \
-          | head -1)
-
-
-          mkdir prepared
-
-
-          convert "$ICON" \
-          -resize 1024x1024 \
-          -gravity center \
-          -background none \
-          -extent 1024x1024 \
-          prepared/icon.png
-
-
-
-      - name: Generate icons
-        run: |
-
-          for item in \
-          "mipmap-mdpi 48" \
-          "mipmap-hdpi 72" \
-          "mipmap-xhdpi 96" \
-          "mipmap-xxhdpi 144" \
-          "mipmap-xxxhdpi 192"
-
-          do
-
-          folder=$(echo $item | cut -d' ' -f1)
-          size=$(echo $item | cut -d' ' -f2)
-
-          mkdir -p source/app/src/main/res/$folder
-
-
-          convert prepared/icon.png \
-          -resize ${size}x${size} \
-          source/app/src/main/res/$folder/ic_launcher.png
-
-
-          done
-
-
+          if [ -d source/ui ]; then
+            echo "FLUTTER_DIR=source/ui" >> $GITHUB_ENV
+          elif [ -f source/pubspec.yaml ]; then
+            echo "FLUTTER_DIR=source" >> $GITHUB_ENV
+          else
+            echo "Flutter project not found"
+            exit 1
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -122,44 +48,158 @@ jobs:
           java-version: 17
           cache: gradle
 
-
-
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: 3.44.2
+          flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
 
+      - name: Flutter Doctor
+        run: flutter doctor -v
 
+      - name: Accept Android SDK Licenses
+        run: yes | flutter doctor --android-licenses || true
 
-      - name: Flutter dependencies
-        working-directory: source/ui
+      - name: Install Android SDK Components
         run: |
-          flutter pub get
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-34" \
+            "build-tools;34.0.0"
 
+      - name: Install ImageMagick
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y imagemagick
 
+      - name: Find application icon
+        run: |
+          ICON=$(find melly-assets \
+            -type f \
+            \( -iname "icon.png" \
+            -o -iname "logo.png" \
+            -o -iname "*icon*.png" \) \
+            | head -1)
+
+          if [ -z "$ICON" ]; then
+            echo "No icon found"
+            exit 1
+          fi
+
+          mkdir -p prepared
+
+          magick "$ICON" \
+            -resize 1024x1024 \
+            -background none \
+            -gravity center \
+            -extent 1024x1024 \
+            prepared/icon.png
+
+      - name: Locate Android resources
+        run: |
+          RES_DIR=$(find "$FLUTTER_DIR" \
+            -path "*/android/app/src/main/res" \
+            | head -1)
+
+          if [ -z "$RES_DIR" ]; then
+            echo "Android resources folder not found"
+            exit 1
+          fi
+
+          echo "RES_DIR=$RES_DIR" >> $GITHUB_ENV
+
+      - name: Generate launcher icons
+        run: |
+          declare -A SIZES=(
+            ["mipmap-mdpi"]=48
+            ["mipmap-hdpi"]=72
+            ["mipmap-xhdpi"]=96
+            ["mipmap-xxhdpi"]=144
+            ["mipmap-xxxhdpi"]=192
+          )
+
+          for folder in "${!SIZES[@]}"
+          do
+            size=${SIZES[$folder]}
+
+            mkdir -p "$RES_DIR/$folder"
+
+            magick prepared/icon.png \
+              -resize ${size}x${size} \
+              "$RES_DIR/$folder/ic_launcher.png"
+
+            cp \
+              "$RES_DIR/$folder/ic_launcher.png" \
+              "$RES_DIR/$folder/ic_launcher_round.png"
+          done
+
+      - name: Create adaptive icon resources
+        run: |
+          mkdir -p "$RES_DIR/mipmap-anydpi-v26"
+          mkdir -p "$RES_DIR/drawable"
+
+          magick prepared/icon.png \
+            -resize 432x432 \
+            "$RES_DIR/drawable/ic_launcher_foreground.png"
+
+          cat > "$RES_DIR/drawable/ic_launcher_background.xml" << 'EOF'
+          <shape xmlns:android="http://schemas.android.com/apk/res/android">
+              <solid android:color="#FFFFFF"/>
+          </shape>
+          EOF
+
+          cat > "$RES_DIR/mipmap-anydpi-v26/ic_launcher.xml" << 'EOF'
+          <adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+              <background android:drawable="@drawable/ic_launcher_background"/>
+              <foreground android:drawable="@drawable/ic_launcher_foreground"/>
+          </adaptive-icon>
+          EOF
+
+          cp \
+            "$RES_DIR/mipmap-anydpi-v26/ic_launcher.xml" \
+            "$RES_DIR/mipmap-anydpi-v26/ic_launcher_round.xml"
+
+      - name: Apply branding safely
+        run: |
+          STRINGS=$(find "$FLUTTER_DIR" \
+            -path "*/android/app/src/main/res/values/strings.xml" \
+            | head -1)
+
+          if [ -n "$STRINGS" ]; then
+            sed -i \
+              's#<string name="app_name">.*</string>#<string name="app_name">Melly 1.1</string>#' \
+              "$STRINGS"
+          fi
+
+      - name: Get Flutter Dependencies
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: flutter pub get
+
+      - name: Analyze Flutter Project
+        working-directory: ${{ env.FLUTTER_DIR }}
+        run: flutter analyze || true
 
       - name: Build APK
-        working-directory: source
+        working-directory: ${{ env.FLUTTER_DIR }}
         run: |
+          flutter build apk --debug
 
-          chmod +x gradlew
-
-          ./gradlew assembleDebug \
-          --stacktrace \
-          --no-daemon
-
-
-
-      - name: Locate APK
+      - name: Verify APK
         run: |
-          find source -name "*.apk"
+          APK=$(find "$FLUTTER_DIR/build/app/outputs/flutter-apk" \
+            -name "*.apk" | head -1)
 
+          if [ -z "$APK" ]; then
+            echo "APK not generated"
+            exit 1
+          fi
 
+          ls -lh "$APK"
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
           path: |
-            source/**/build/outputs/apk/**/*.apk
+            ${{ env.FLUTTER_DIR }}/build/app/outputs/flutter-apk/*.apk
+          if-no-files-found: error
