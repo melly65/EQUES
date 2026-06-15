@@ -7,33 +7,31 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          path: melly-repo
       - name: Clone source
         run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
       - name: Apply Melly 1.1 branding
         run: |
           cd source
+          find . \( -name "*.kt" -o -name "*.java" -o -name "*.dart" -o -name "*.arb" -o -name "*.html" -o -name "*.json" \) | xargs grep -rl "Omnibot\|小万" 2>/dev/null | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
           sed -i 's|<string name="omni_app_name">[^<]*</|<string name="omni_app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
           sed -i 's|<string name="app_name">[^<]*</|<string name="app_name">Melly 1.1</|' app/src/main/res/values/strings.xml 2>/dev/null || true
-          find . \( -name "chat_empty_greeting.dart" -o -name "*.arb" -o -name "*.html" -o -name "*.json" \) | while read f; do sed -i 's/Omnibot/Melly 1.1/g; s/小万/Melly 1.1/g' "$f" 2>/dev/null || true; done
-      - name: Generate icon
+      - name: Install imagemagick
+        run: sudo apt-get install -y imagemagick
+      - name: Generate icons from custom image
         run: |
-          python3 << 'PYEOF'
-          import struct, zlib, os
-          def png(w,h):
-            cx,cy=w//2,h//2;R=min(w,h)*0.4;raw=b''
-            for y_ in range(h):
-              raw+=b'\x00'
-              for x_ in range(w):
-                d=((x_-cx)**2+(y_-cy)**2)**0.5
-                if d<=R: r=d/R;raw+=struct.pack('BBBB',int(10+(108-10)*r*0.3),int(10+(60-10)*r*0.3),int(26+(224-26)*r*0.3),255)
-                else: raw+=struct.pack('BBBB',0,0,0,0)
-            def c(t,d): return struct.pack('>I',len(d))+t+d+struct.pack('>I',zlib.crc32(t+d)&0xffffffff)
-            return b'\x89PNG\r\n\x1a\n'+c(b'IHDR',struct.pack('>IIBBBBB',w,h,8,6,0,0,0))+c(b'IDAT',zlib.compress(raw))+c(b'IEND',b'')
-          for f,s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
-            d='source/app/src/main/res/'+f;os.makedirs(d,exist_ok=True);p=png(s,s)
-            open(d+'/ic_launcher.png','wb').write(p);open(d+'/ic_launcher_round.png','wb').write(p)
-          print('Icon OK')
-          PYEOF
+          find melly-repo -name "*.png" | head -1 | xargs -I{} cp {} melly-repo/assets/melly_icon.png 2>/dev/null || true
+          SOURCE="melly-repo/assets/melly_icon.png"
+          for folder in mipmap-mdpi:48 mipmap-hdpi:72 mipmap-xhdpi:96 mipmap-xxhdpi:144 mipmap-xxxhdpi:192; do
+            name="${folder%%:*}"; size="${folder##*:}"
+            dir="source/app/src/main/res/$name"
+            mkdir -p "$dir"
+            convert "$SOURCE" -resize "${size}x${size}" "$dir/ic_launcher.png"
+            convert "$SOURCE" -resize "${size}x${size}" "$dir/ic_launcher_round.png"
+          done
+          find source/app/src/main/res/mipmap-anydpi-v26 -name "ic_launcher*.xml" -delete 2>/dev/null || true
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
