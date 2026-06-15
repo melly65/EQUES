@@ -15,59 +15,63 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
-      - name: Show Repository Tree
+      - name: Show Repository Root
         run: |
           echo "===== ROOT ====="
           ls -la source
 
       - name: Find Flutter Projects
         run: |
-          echo "===== PUBSPEC ====="
+          echo "===== PUBSPEC FILES ====="
           find source -name pubspec.yaml
 
       - name: Find Android Directories
         run: |
-          echo "===== ANDROID ====="
+          echo "===== ANDROID DIRECTORIES ====="
           find source -type d -name android
 
       - name: Find Resource Directories
         run: |
-          echo "===== RES ====="
+          echo "===== RESOURCE DIRECTORIES ====="
           find source -type d -name res
 
       - name: Find Gradle Wrappers
         run: |
-          echo "===== GRADLEW ====="
+          echo "===== GRADLE WRAPPERS ====="
           find source -name gradlew
-
-      - name: Find Launcher Icons
-        run: |
-          echo "===== ICONS ====="
-          find source \
-            \( -name "ic_launcher*" \
-            -o -name "*launcher*" \
-            -o -name "*.png" \)
-
-      - name: Find App Names
-        run: |
-          echo "===== strings.xml ====="
-          find source -name strings.xml
 
       - name: Find Android Manifests
         run: |
-          echo "===== AndroidManifest ====="
+          echo "===== ANDROID MANIFESTS ====="
           find source -name AndroidManifest.xml
 
-      - name: Find Build Files
+      - name: Find Strings Files
         run: |
-          echo "===== build.gradle ====="
-          find source \
-            \( -name build.gradle \
-            -o -name build.gradle.kts \
-            -o -name settings.gradle \
-            -o -name settings.gradle.kts \)
+          echo "===== STRINGS XML ====="
+          find source -name strings.xml
 
-      - name: Dump Important Paths
+      - name: Find Launcher Icons
         run: |
-          echo "===== TOP 4 LEVELS ====="
+          echo "===== LAUNCHER ICONS ====="
+          find source \
+            \( \
+              -name "ic_launcher*" \
+              -o -name "*launcher*" \
+              -o -name "*.png" \
+            \)
+
+      - name: Find Gradle Files
+        run: |
+          echo "===== GRADLE FILES ====="
+          find source \
+            \( \
+              -name build.gradle \
+              -o -name build.gradle.kts \
+              -o -name settings.gradle \
+              -o -name settings.gradle.kts \
+            \)
+
+      - name: Print Directory Tree
+        run: |
+          echo "===== DIRECTORY TREE (4 LEVELS) ====="
           find source -maxdepth 4 -type d | sort
