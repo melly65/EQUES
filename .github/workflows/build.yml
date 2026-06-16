@@ -25,22 +25,53 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow -q
 
-      - name: Safe branding
+      - name: Full visual rebranding
         run: |
           python3 << 'PYEOF'
-          import os, re
-          src, name = 'source', 'Melly 1.1'
+          import os, re, glob
+          from PIL import Image, ImageDraw
+
+          src = 'source'
+          name = 'Melly 1.1'
+
+          # 1. STRINGS.XML
           sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
           if os.path.exists(sp):
             with open(sp, 'r') as f: c = f.read()
             c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{name}</string>', c)
             c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{name}</string>', c)
             with open(sp, 'w') as f: f.write(c)
+            print('[OK] strings.xml')
+
+          # 2. GREETING DART
           gf = os.path.join(src, 'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart')
           if os.path.exists(gf):
             with open(gf, 'r') as f: c = f.read()
-            c = c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1").replace("Hi 👋, I'm OmniBot", "Hi 👋, I'm Melly 1.1")
+            c = c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1")
+            c = c.replace("Hi 👋, I'm OmniBot", "Hi 👋, I'm Melly 1.1")
+            c = c.replace("Your AI assistant, always ready", "Your personal AI assistant")
             with open(gf, 'w') as f: f.write(c)
+            print('[OK] greeting.dart')
+
+          # 3. TODOS OS .DART — substituir strings visíveis
+          dart_files = []
+          for root, dirs, files in os.walk(os.path.join(src, 'ui/lib')):
+            if any(s in root for s in ['.dart_tool', 'build', '.git']): continue
+            for fn in files:
+              if fn.endswith('.dart'): dart_files.append(os.path.join(root, fn))
+          replacements = {"Omnibot": name, "OmniBot": name, "小万": name}
+          for dp in dart_files:
+            try:
+              with open(dp, 'r', encoding='utf-8', errors='ignore') as f: c = f.read()
+            except: continue
+            orig = c
+            for old, new in replacements.items():
+              c = re.sub(rf"(['\"`]){re.escape(old)}(['\"`])", rf'\1{new}\2', c)
+            if c != orig:
+              with open(dp, 'w', encoding='utf-8') as f: f.write(c)
+              print(f'  [DART] {os.path.relpath(dp, src)}')
+
+          # 4. ARQUIVOS .ARB (traduções)
           for root, dirs, files in os.walk(os.path.join(src, 'ui/lib/l10n')):
             for fn in files:
               if not fn.endswith('.arb'): continue
@@ -49,27 +80,52 @@ jobs:
               if 'Omnibot' in c or 'OmniBot' in c or '小万' in c:
                 c = c.replace('Omnibot', name).replace('OmniBot', name).replace('小万', name)
                 with open(fp, 'w', encoding='utf-8') as f: f.write(c)
-          PYEOF
+                print(f'  [ARB] {fn}')
 
-      - name: Generate icon
-        run: |
-          python3 << 'PYEOF'
-          import os
-          from PIL import Image, ImageDraw
+          # 5. ARQUIVOS .JSON
+          for root, dirs, files in os.walk(os.path.join(src, 'ui')):
+            for fn in files:
+              if not fn.endswith('.json') or 'build' in root: continue
+              fp = os.path.join(root, fn)
+              with open(fp, 'r', encoding='utf-8') as f: c = f.read()
+              if 'Omnibot' in c or 'OmniBot' in c:
+                c = c.replace('Omnibot', name).replace('OmniBot', name)
+                with open(fp, 'w', encoding='utf-8') as f: f.write(c)
+                print(f'  [JSON] {fn}')
+
+          # 6. SPLASH E ASSETS — substituir imagens do mascote
+          def make_melly_icon(size):
+            img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+            d = ImageDraw.Draw(img)
+            m = size // 8
+            d.rounded_rectangle([m, m, size-m, size-m], radius=size//4, fill=(10, 10, 26, 255))
+            cx, cy = size // 2, size // 2
+            sz = size // 5
+            w = max(2, size // 20)
+            d.line([cx-sz-w, cy-sz, cx+sz-w, cy, cx-sz-w, cy+sz], fill=(0, 229, 255, 255), width=w)
+            d.line([cx-sz+w, cy-sz, cx+sz+w, cy, cx-sz+w, cy+sz], fill=(0, 229, 255, 255), width=w)
+            return img
+
+          for pat in ['**/splash*', '**/logo*.png', '**/logo*.webp', '**/omnibot*.png', '**/omnibot*.webp', '**/mascot*.png']:
+            for fp in glob.glob(os.path.join(src, pat), recursive=True):
+              if '.git' in fp or 'build' in fp or '.dart_tool' in fp: continue
+              try:
+                make_melly_icon(200).save(fp, 'PNG')
+                print(f'  [IMAGE] Substituido: {os.path.relpath(fp, src)}')
+              except: pass
+
+          # 7. ÍCONE DO APP — todos os tamanhos
           for dn, s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
-            od = os.path.join('source/app/src/main/res', dn)
+            od = os.path.join(src, 'app/src/main/res', dn)
             os.makedirs(od, exist_ok=True)
-            i = Image.new('RGBA',(s,s),(0,0,0,0))
-            d = ImageDraw.Draw(i)
-            m = s//8
-            d.rounded_rectangle([m,m,s-m,s-m], radius=s//4, fill=(10,10,26,255))
-            cx,cy,o,w = s//2,s//2,s//5,max(2,s//20)
-            d.line([cx-o,cy+o//2,cx-o,cy-o//2,cx,cy+o//3,cx+o,cy-o//2,cx+o,cy+o//2], fill=(0,229,255,255), width=w)
-            i.save(os.path.join(od,'ic_launcher.png'),'PNG')
-          for sd in ['mipmap-anydpi-v26','drawable-anydpi-v26']:
-            for fn in ['ic_launcher.xml','ic_launcher_round.xml']:
-              p = os.path.join('source/app/src/main/res', sd, fn)
+            make_melly_icon(s).save(os.path.join(od, 'ic_launcher.png'), 'PNG')
+            print(f'  [ICON] {dn} ({s}x{s})')
+          for sd in ['mipmap-anydpi-v26', 'drawable-anydpi-v26']:
+            for fn in ['ic_launcher.xml', 'ic_launcher_round.xml']:
+              p = os.path.join(src, 'app/src/main/res', sd, fn)
               if os.path.exists(p): os.remove(p)
+
+          print('✅ Rebranding visual completo')
           PYEOF
 
       - name: Setup Java 17
@@ -103,7 +159,7 @@ jobs:
           APKS=$(find source -type f -name "*.apk" 2>/dev/null)
           COUNT=$(echo "$APKS" | wc -l)
           echo "$APKS" | sort
-          echo "=== Total: $COUNT APK(s) encontrado(s) ==="
+          echo "=== Total: $COUNT APK(s) ==="
           if [ -z "$APKS" ]; then
             echo "❌ Nenhum APK gerado!"
             exit 1
