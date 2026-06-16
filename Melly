@@ -1,0 +1,105 @@
+name: Build Melly 1.1 APK
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: melly-repo
+
+      - name: Clone OpenOmniBot
+        run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Pillow
+        run: pip install Pillow -q
+
+      - name: Branding strings
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+          src = 'source'
+          name = 'Melly 1.1'
+          sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
+          if os.path.exists(sp):
+            with open(sp, 'r') as f: c = f.read()
+            c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{name}</string>', c)
+            c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{name}</string>', c)
+            with open(sp, 'w') as f: f.write(c)
+          for old, new in [('Omnibot',name),('OmniBot',name),('OpenOmniBot',name)]:
+            for r, d, fs in os.walk(src):
+              d[:] = [x for x in d if x not in {'build','.gradle','third_party','.git'}]
+              for fn in fs:
+                if not fn.endswith(('.dart','.kt','.xml','.arb','.html','.json','.yaml','.java')): continue
+                fp = os.path.join(r, fn)
+                try:
+                  with open(fp, 'r', encoding='utf-8', errors='ignore') as f: c = f.read()
+                except: continue
+                if old in c:
+                  with open(fp, 'w', encoding='utf-8') as f: f.write(c.replace(old, new))
+          gf = os.path.join(src, 'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart')
+          if os.path.exists(gf):
+            with open(gf, 'r') as f: c = f.read()
+            with open(gf, 'w') as f: f.write(c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1"))
+          PYEOF
+
+      - name: Generate icon
+        run: |
+          python3 << 'PYEOF'
+          import os
+          from PIL import Image, ImageDraw
+          for dn, s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
+            od = os.path.join('source/app/src/main/res', dn)
+            os.makedirs(od, exist_ok=True)
+            i = Image.new('RGBA',(s,s),(0,0,0,0))
+            d = ImageDraw.Draw(i)
+            m = s//8
+            d.rounded_rectangle([m,m,s-m,s-m], radius=s//4, fill=(10,10,26,255))
+            cx,cy,o,w = s//2,s//2,s//5,max(2,s//20)
+            d.line([cx-o,cy+o//2,cx-o,cy-o//2,cx,cy+o//3,cx+o,cy-o//2,cx+o,cy+o//2], fill=(0,229,255,255), width=w)
+            i.save(os.path.join(od,'ic_launcher.png'),'PNG')
+          for sd in ['mipmap-anydpi-v26','drawable-anydpi-v26']:
+            for fn in ['ic_launcher.xml','ic_launcher_round.xml']:
+              p = os.path.join('source/app/src/main/res', sd, fn)
+              if os.path.exists(p): os.remove(p)
+          PYEOF
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Flutter pub get
+        working-directory: source/ui
+        run: flutter pub get
+
+      - name: Build APK
+        working-directory: source
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDevelopStandardDebug --stacktrace --no-daemon -Ptarget=lib/main_standard.dart
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Melly-1.1-debug
+          path: source/app/build/outputs/apk/developStandard/debug/app-developStandard-debug.apk
+          if-no-files-found: error
