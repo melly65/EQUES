@@ -110,3 +110,4 @@ jobs:
         with:
           name: Melly-1.1-release
           path: ui/build/app/outputs/flutter-apk/app-release.apk
+ 
