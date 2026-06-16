@@ -25,12 +25,11 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow -q
 
-      - name: Safe branding (visible strings only)
+      - name: Safe branding
         run: |
           python3 << 'PYEOF'
           import os, re
-          src = 'source'
-          name = 'Melly 1.1'
+          src, name = 'source', 'Melly 1.1'
           sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
           if os.path.exists(sp):
             with open(sp, 'r') as f: c = f.read()
@@ -40,8 +39,7 @@ jobs:
           gf = os.path.join(src, 'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart')
           if os.path.exists(gf):
             with open(gf, 'r') as f: c = f.read()
-            c = c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1")
-            c = c.replace("Hi 👋, I'm OmniBot", "Hi 👋, I'm Melly 1.1")
+            c = c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1").replace("Hi 👋, I'm OmniBot", "Hi 👋, I'm Melly 1.1")
             with open(gf, 'w') as f: f.write(c)
           for root, dirs, files in os.walk(os.path.join(src, 'ui/lib/l10n')):
             for fn in files:
@@ -95,10 +93,17 @@ jobs:
         continue-on-error: true
         run: flutter analyze 2>&1 | tail -50
 
-      - name: Build APK (verbose)
+      - name: Build APK
         working-directory: source/ui
         run: |
           flutter build apk --debug -t lib/main_standard.dart -v 2>&1 | tail -200
+
+      - name: Locate APK
+        run: |
+          echo "=== Procurando APKs em source/ ==="
+          find source -type f -name "*.apk" | sort
+          echo "=== Total ==="
+          find source -type f -name "*.apk" | wc -l
 
       - name: Upload logs on failure
         if: failure()
@@ -110,22 +115,10 @@ jobs:
             source/build/reports
           if-no-files-found: ignore
 
-      - name: Verify APK
-        if: success()
-        run: |
-          APK="source/ui/build/app/outputs/flutter-apk/app-debug.apk"
-          if [ -f "$APK" ]; then
-            echo "APK encontrado: $(ls -lh "$APK")"
-          else
-            echo "APK nao encontrado"
-            find source -name "*.apk" -type f 2>/dev/null
-            exit 1
-          fi
-
       - name: Upload APK
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
-          path: source/ui/build/app/outputs/flutter-apk/app-debug.apk
+          path: source/**/*.apk
           if-no-files-found: error
