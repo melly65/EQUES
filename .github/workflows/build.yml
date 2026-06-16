@@ -1,268 +1,105 @@
 name: Build Melly 1.1 APK
 
 on:
-push:
-branches:
-- main
-
-workflow_dispatch:
-inputs:
-app_name:
-description: Nome do app
-required: false
-default: "Melly 1.1"
-
-  app_name_cn:
-    description: Nome chinês
-    required: false
-    default: "Melly 1.1"
+  push:
+    branches: [ main ]
+  workflow_dispatch:
 
 jobs:
-build:
-runs-on: ubuntu-latest
+  build:
+    runs-on: ubuntu-latest
 
-steps:
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: melly-repo
 
-  # =========================
-  # CHECKOUT
-  # =========================
+      - name: Clone OpenOmniBot
+        run: git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git source
 
-  - name: Checkout Melly repo
-    uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
 
-  # =========================
-  # CLONE OPENOMNIBOT
-  # =========================
+      - name: Install Pillow
+        run: pip install Pillow -q
 
-  - name: Clone OpenOmniBot
-    run: |
-      git config --global url."https://github.com/".insteadOf git@github.com:
+      - name: Branding strings
+        run: |
+          python3 << 'PYEOF'
+          import os, re
+          src = 'source'
+          name = 'Melly 1.1'
+          sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
+          if os.path.exists(sp):
+            with open(sp, 'r') as f: c = f.read()
+            c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{name}</string>', c)
+            c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{name}</string>', c)
+            with open(sp, 'w') as f: f.write(c)
+          for old, new in [('Omnibot',name),('OmniBot',name),('OpenOmniBot',name)]:
+            for r, d, fs in os.walk(src):
+              d[:] = [x for x in d if x not in {'build','.gradle','third_party','.git'}]
+              for fn in fs:
+                if not fn.endswith(('.dart','.kt','.xml','.arb','.html','.json','.yaml','.java')): continue
+                fp = os.path.join(r, fn)
+                try:
+                  with open(fp, 'r', encoding='utf-8', errors='ignore') as f: c = f.read()
+                except: continue
+                if old in c:
+                  with open(fp, 'w', encoding='utf-8') as f: f.write(c.replace(old, new))
+          gf = os.path.join(src, 'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart')
+          if os.path.exists(gf):
+            with open(gf, 'r') as f: c = f.read()
+            with open(gf, 'w') as f: f.write(c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1"))
+          PYEOF
 
-      git clone \
-        --depth 1 \
-        https://github.com/omnimind-ai/OpenOmniBot.git \
-        /tmp/omnibot
+      - name: Generate icon
+        run: |
+          python3 << 'PYEOF'
+          import os
+          from PIL import Image, ImageDraw
+          for dn, s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
+            od = os.path.join('source/app/src/main/res', dn)
+            os.makedirs(od, exist_ok=True)
+            i = Image.new('RGBA',(s,s),(0,0,0,0))
+            d = ImageDraw.Draw(i)
+            m = s//8
+            d.rounded_rectangle([m,m,s-m,s-m], radius=s//4, fill=(10,10,26,255))
+            cx,cy,o,w = s//2,s//2,s//5,max(2,s//20)
+            d.line([cx-o,cy+o//2,cx-o,cy-o//2,cx,cy+o//3,cx+o,cy-o//2,cx+o,cy+o//2], fill=(0,229,255,255), width=w)
+            i.save(os.path.join(od,'ic_launcher.png'),'PNG')
+          for sd in ['mipmap-anydpi-v26','drawable-anydpi-v26']:
+            for fn in ['ic_launcher.xml','ic_launcher_round.xml']:
+              p = os.path.join('source/app/src/main/res', sd, fn)
+              if os.path.exists(p): os.remove(p)
+          PYEOF
 
-  - name: Init submodules safely
-    continue-on-error: true
-    run: |
-      cd /tmp/omnibot
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
 
-      git submodule sync || true
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
 
-      git submodule update \
-        --init \
-        --recursive \
-        --depth 1 || true
+      - name: Flutter pub get
+        working-directory: source/ui
+        run: flutter pub get
 
-  # =========================
-  # ENVIRONMENT
-  # =========================
+      - name: Build APK
+        working-directory: source
+        run: |
+          chmod +x gradlew
+          ./gradlew :app:assembleDevelopStandardDebug --stacktrace --no-daemon -Ptarget=lib/main_standard.dart
 
-  - name: Setup Python
-    uses: actions/setup-python@v5
-    with:
-      python-version: "3.12"
-
-  - name: Install Python dependencies
-    run: |
-      python -m pip install --upgrade pip
-      pip install Pillow
-
-  - name: Setup Java 11
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: "11"
-
-  - name: Setup Flutter
-    uses: subosito/flutter-action@v2
-    with:
-      channel: stable
-      cache: true
-
-  # =========================
-  # VALIDATE SCRIPTS
-  # =========================
-
-  - name: Validate scripts
-    run: |
-      echo "Checking available scripts..."
-
-      ls -la || true
-      ls -la scripts || true
-
-      for file in scripts/*.py
-      do
-        if [ -f "$file" ]; then
-          echo "Found: $file"
-        fi
-      done
-
-  # =========================
-  # BRANDING
-  # =========================
-
-  - name: Replace branding
-    continue-on-error: true
-    run: |
-      if [ -f scripts/replace_branding.py ]; then
-        python3 scripts/replace_branding.py \
-          --app-name "${{ github.event.inputs.app_name || 'Melly 1.1' }}" \
-          --source /tmp/omnibot
-      else
-        echo "replace_branding.py not found, skipping"
-      fi
-
-  - name: Replace package
-    continue-on-error: true
-    run: |
-      if [ -f scripts/replace_package.py ]; then
-        python3 scripts/replace_package.py \
-          --old-package "cn.com.omnimind.bot" \
-          --new-package "br.com.melly.bot" \
-          --source /tmp/omnibot
-      else
-        echo "replace_package.py not found, skipping"
-      fi
-
-  - name: Replace greeting
-    continue-on-error: true
-    run: |
-      if [ -f scripts/replace_greeting.py ]; then
-        python3 scripts/replace_greeting.py \
-          --english "Hi 👋, I'm Melly 1.1" \
-          --chinese "你好👋，我是Melly 1.1" \
-          --english-sub "I can help you" \
-          --chinese-sub "我可以帮助你" \
-          --source /tmp/omnibot
-      else
-        echo "replace_greeting.py not found, skipping"
-      fi
-
-  # =========================
-  # ICON
-  # =========================
-
-  - name: Generate icon
-    continue-on-error: true
-    run: |
-      if [ -f scripts/generate_icon.py ]; then
-        python3 scripts/generate_icon.py \
-          --name "Melly 1.1" \
-          --color-primary "#6C3CE0" \
-          --color-accent "#00E5FF" \
-          --color-bg "#0A0A1A" \
-          --output-dir /tmp/omnibot/app/src/main/res
-      else
-        echo "generate_icon.py not found, skipping"
-      fi
-
-  # =========================
-  # MODIFICATIONS
-  # =========================
-
-  - name: Upgrade API
-    continue-on-error: true
-    run: |
-      if [ -f scripts/upgrade_api.py ]; then
-        python3 scripts/upgrade_api.py \
-          --source /tmp/omnibot
-      else
-        echo "upgrade_api.py not found, skipping"
-      fi
-
-  - name: Apply architecture
-    continue-on-error: true
-    run: |
-      if [ -f scripts/apply_mythos_arch.py ]; then
-        python3 scripts/apply_mythos_arch.py \
-          --source /tmp/omnibot
-      else
-        echo "apply_mythos_arch.py not found, skipping"
-      fi
-
-  # =========================
-  # COPY SOURCE
-  # =========================
-
-  - name: Sync source
-    run: |
-      rsync -av \
-        --exclude scripts \
-        --exclude .github \
-        /tmp/omnibot/ ./
-
-  # =========================
-  # FLUTTER
-  # =========================
-
-  - name: Flutter dependencies
-    continue-on-error: true
-    run: |
-      if [ -d "ui" ]; then
-        cd ui
-        flutter pub get
-      else
-        flutter pub get
-      fi
-
-  # =========================
-  # FIND GRADLE
-  # =========================
-
-  - name: Locate Gradle
-    run: |
-      echo "Gradle files found:"
-      find . -name gradlew -type f || true
-
-      echo ""
-      echo "Checking ui/android:"
-      ls -la ui/android || true
-
-  # =========================
-  # BUILD APK
-  # =========================
-
-  - name: Build APK
-    run: |
-
-      if [ ! -f ui/android/gradlew ]; then
-        echo "ui/android/gradlew not found"
-        exit 1
-      fi
-
-      chmod +x ui/android/gradlew
-
-      cd ui/android
-
-      echo "Java version:"
-      java -version
-
-      echo "Gradle version:"
-      ./gradlew --version || true
-
-      echo "Available assemble tasks:"
-      ./gradlew tasks --all | grep assemble || true
-
-      ./gradlew assembleRelease --stacktrace
-
-  # =========================
-  # FIND APK
-  # =========================
-
-  - name: Find APK
-    run: |
-      echo "Searching APK files..."
-      find . -name "*.apk" -print
-
-  # =========================
-  # UPLOAD
-  # =========================
-
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: Melly-1.1-release
-      path: |
-        ui/**/build/outputs/**/*.apk
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Melly-1.1-debug
+          path: source/app/build/outputs/apk/developStandard/debug/app-developStandard-debug.apk
+          if-no-files-found: error
