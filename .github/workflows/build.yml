@@ -24,32 +24,52 @@ jobs:
 
     runs-on: ubuntu-latest
 
+
     steps:
 
-      # ==========================
-      # CHECKOUT
-      # ==========================
 
-      - name: Checkout Melly
+      # =========================
+      # CHECKOUT MELLY
+      # =========================
+
+      - name: Checkout Melly repo
         uses: actions/checkout@v4
 
 
-      # ==========================
-      # CLONE SOURCE
-      # ==========================
+
+      # =========================
+      # CLONE OPENOMNIBOT
+      # =========================
 
       - name: Clone OpenOmniBot
         run: |
+
+          git config --global url."https://github.com/".insteadOf git@github.com:
+
           git clone \
           --depth 1 \
-          --recursive \
           https://github.com/omnimind-ai/OpenOmniBot.git \
           /tmp/omnibot
 
 
-      # ==========================
-      # ENV
-      # ==========================
+      - name: Init submodules safely
+        continue-on-error: true
+        run: |
+
+          cd /tmp/omnibot
+
+          git submodule sync
+
+          git submodule update \
+          --init \
+          --recursive \
+          --depth 1
+
+
+
+      # =========================
+      # ENVIRONMENT
+      # =========================
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -57,17 +77,21 @@ jobs:
           python-version: "3.12"
 
 
-      - name: Install Python tools
+
+      - name: Install Python dependencies
         run: |
+
           pip install --upgrade pip
           pip install Pillow
 
 
-      - name: Setup Java
+
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: "17"
+
 
 
       - name: Setup Flutter
@@ -77,46 +101,47 @@ jobs:
           cache: true
 
 
-      # ==========================
-      # VALIDATION
-      # ==========================
 
-      - name: Validate files
+      # =========================
+      # VALIDATION
+      # =========================
+
+      - name: Validate scripts
         run: |
 
-          echo "Workspace:"
-          ls -la
 
-          echo "Scripts:"
-          ls -la scripts || true
+          echo "Checking scripts..."
+
+          ls -la scripts
 
 
-          REQUIRED="
-          replace_branding.py
-          replace_package.py
-          replace_greeting.py
-          generate_icon.py
-          upgrade_api.py
+          for file in \
+          replace_branding.py \
+          replace_package.py \
+          replace_greeting.py \
+          generate_icon.py \
+          upgrade_api.py \
           apply_mythos_arch.py
-          "
 
-
-          for file in $REQUIRED
           do
+
             if [ ! -f scripts/$file ]; then
-              echo "Missing script: $file"
+
+              echo "Missing: scripts/$file"
               exit 1
+
             fi
+
           done
 
 
 
-      # ==========================
+      # =========================
       # BRANDING
-      # ==========================
+      # =========================
 
 
-      - name: Replace app name
+      - name: Replace branding
         run: |
 
           python3 scripts/replace_branding.py \
@@ -147,10 +172,10 @@ jobs:
 
 
 
-      # ==========================
-      # ICON
-      # ==========================
 
+      # =========================
+      # ICON
+      # =========================
 
       - name: Generate icon
         run: |
@@ -164,10 +189,10 @@ jobs:
 
 
 
-      # ==========================
-      # MODS
-      # ==========================
 
+      # =========================
+      # MODIFICATIONS
+      # =========================
 
       - name: Upgrade API
         run: |
@@ -185,12 +210,12 @@ jobs:
 
 
 
-      # ==========================
-      # COPY
-      # ==========================
 
+      # =========================
+      # SYNC SOURCE
+      # =========================
 
-      - name: Sync source
+      - name: Copy source
         run: |
 
           rsync -av \
@@ -200,15 +225,16 @@ jobs:
 
 
 
-      # ==========================
+
+      # =========================
       # FLUTTER
-      # ==========================
+      # =========================
 
-
-      - name: Flutter dependencies
+      - name: Flutter pub get
         run: |
 
-          if [ -d "ui" ]; then
+
+          if [ -d ui ]; then
 
             cd ui
             flutter pub get
@@ -221,24 +247,24 @@ jobs:
 
 
 
-      # ==========================
-      # LOCATE GRADLE
-      # ==========================
 
+      # =========================
+      # FIND GRADLE
+      # =========================
 
-      - name: Find Gradle
+      - name: Locate Gradle
         run: |
 
-          echo "Searching gradlew..."
+          echo "Gradle files:"
 
           find . -name gradlew -type f
 
 
 
-      # ==========================
-      # BUILD
-      # ==========================
 
+      # =========================
+      # BUILD
+      # =========================
 
       - name: Build APK
         run: |
@@ -248,9 +274,12 @@ jobs:
 
 
           if [ -z "$GRADLE" ]; then
-            echo "Gradle not found"
+
+            echo "No gradle found"
             exit 1
+
           fi
+
 
 
           chmod +x $GRADLE
@@ -262,30 +291,33 @@ jobs:
           cd $DIR
 
 
-          ./gradlew \
-          assembleRelease \
+          echo "Gradle tasks:"
+
+          ./gradlew tasks --all | grep assemble || true
+
+
+
+          ./gradlew assembleRelease \
           --stacktrace
 
 
 
-      # ==========================
+
+      # =========================
       # FIND APK
-      # ==========================
+      # =========================
 
-
-      - name: Locate APK
+      - name: Find APK
         run: |
 
-          echo "APK files:"
-
-          find . -name "*.apk"
+          find . -name "*.apk" -print
 
 
 
-      # ==========================
+
+      # =========================
       # UPLOAD
-      # ==========================
-
+      # =========================
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
