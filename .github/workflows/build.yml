@@ -2,92 +2,73 @@ name: Build Melly 1.1 APK
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+
   workflow_dispatch:
     inputs:
       app_name:
-        description: 'Nome do app'
+        description: Nome do app
         required: false
-        default: 'Melly 1.1'
+        default: Melly 1.1
+
       app_name_cn:
-        description: 'Nome chinês'
+        description: Nome chinês
         required: false
-        default: 'Melly 1.1'
+        default: Melly 1.1
+
 
 jobs:
+
   build:
+
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout MellyApp repo
+
+      # ==========================
+      # CHECKOUT
+      # ==========================
+
+      - name: Checkout Melly
         uses: actions/checkout@v4
 
-      - name: Clone OpenOmniBot source
+
+      # ==========================
+      # CLONE SOURCE
+      # ==========================
+
+      - name: Clone OpenOmniBot
         run: |
-          git clone --depth 1 https://github.com/omnimind-ai/OpenOmniBot.git /tmp/omnibot
+          git clone \
+          --depth 1 \
+          --recursive \
+          https://github.com/omnimind-ai/OpenOmniBot.git \
+          /tmp/omnibot
+
+
+      # ==========================
+      # ENV
+      # ==========================
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
+          python-version: "3.12"
 
-      - name: Install Pillow for icon generation
-        run: pip install Pillow
 
-      # ==================== BRANDING ====================
-      - name: Replace app name
+      - name: Install Python tools
         run: |
-          python3 scripts/replace_branding.py \
-            --app-name "Melly 1.1" \
-            --source /tmp/omnibot
+          pip install --upgrade pip
+          pip install Pillow
 
-      - name: Replace package name
-        run: |
-          python3 scripts/replace_package.py \
-            --old-package "cn.com.omnimind.bot" \
-            --new-package "br.com.melly.bot" \
-            --source /tmp/omnibot
 
-      - name: Replace greeting text
-        run: |
-          python3 scripts/replace_greeting.py \
-            --english "Hi 👋, I'm Melly 1.1" \
-            --chinese "你好👋，我是Melly 1.1" \
-            --english-sub "I can help you" \
-            --chinese-sub "我可以帮助你" \
-            --source /tmp/omnibot
-
-      # ==================== ICON ====================
-      - name: Generate app icon
-        run: |
-          python3 scripts/generate_icon.py \
-            --name "Melly 1.1" \
-            --color-primary "#6C3CE0" \
-            --color-accent "#00E5FF" \
-            --color-bg "#0A0A1A" \
-            --output-dir /tmp/omnibot/app/src/main/res
-
-      # ==================== API UPGRADE ====================
-      - name: Apply DeepSeek V4 Pro config
-        run: |
-          python3 scripts/upgrade_api.py \
-            --source /tmp/omnibot
-
-      # ==================== ARCHITECTURE ====================
-      - name: Apply Mythos architecture
-        run: |
-          python3 scripts/apply_mythos_arch.py \
-            --source /tmp/omnibot
-
-      # ==================== BUILD ====================
-      - name: Copy source to workspace (preserve scripts/.github)
-        run: |
-          rsync -a --exclude='scripts/' --exclude='.github/' /tmp/omnibot/ ./
-
-      - name: Setup Java 17
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          java-version: '17'
-          distribution: 'temurin'
+          distribution: temurin
+          java-version: 17
+
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -95,17 +76,222 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Flutter pub get
-        run: |
-          cd ui
-          flutter pub get
 
-      - name: Build APK Release (Gradle)
-        run: |
-          ./gradlew :app:assembleDevelopStandardRelease -Ptarget=lib/main_standard.dart
+      # ==========================
+      # VALIDATION
+      # ==========================
 
-      - name: Upload APK artifact
+      - name: Validate files
+        run: |
+
+          echo "Workspace:"
+          ls -la
+
+          echo "Scripts:"
+          ls -la scripts || true
+
+
+          REQUIRED="
+          replace_branding.py
+          replace_package.py
+          replace_greeting.py
+          generate_icon.py
+          upgrade_api.py
+          apply_mythos_arch.py
+          "
+
+
+          for file in $REQUIRED
+          do
+            if [ ! -f scripts/$file ]; then
+              echo "Missing script: $file"
+              exit 1
+            fi
+          done
+
+
+
+      # ==========================
+      # BRANDING
+      # ==========================
+
+
+      - name: Replace app name
+        run: |
+
+          python3 scripts/replace_branding.py \
+          --app-name "${{ github.event.inputs.app_name || 'Melly 1.1' }}" \
+          --source /tmp/omnibot
+
+
+
+      - name: Replace package
+        run: |
+
+          python3 scripts/replace_package.py \
+          --old-package "cn.com.omnimind.bot" \
+          --new-package "br.com.melly.bot" \
+          --source /tmp/omnibot
+
+
+
+      - name: Replace greeting
+        run: |
+
+          python3 scripts/replace_greeting.py \
+          --english "Hi 👋, I'm Melly 1.1" \
+          --chinese "你好👋，我是Melly 1.1" \
+          --english-sub "I can help you" \
+          --chinese-sub "我可以帮助你" \
+          --source /tmp/omnibot
+
+
+
+      # ==========================
+      # ICON
+      # ==========================
+
+
+      - name: Generate icon
+        run: |
+
+          python3 scripts/generate_icon.py \
+          --name "Melly 1.1" \
+          --color-primary "#6C3CE0" \
+          --color-accent "#00E5FF" \
+          --color-bg "#0A0A1A" \
+          --output-dir /tmp/omnibot/app/src/main/res
+
+
+
+      # ==========================
+      # MODS
+      # ==========================
+
+
+      - name: Upgrade API
+        run: |
+
+          python3 scripts/upgrade_api.py \
+          --source /tmp/omnibot
+
+
+
+      - name: Apply architecture
+        run: |
+
+          python3 scripts/apply_mythos_arch.py \
+          --source /tmp/omnibot
+
+
+
+      # ==========================
+      # COPY
+      # ==========================
+
+
+      - name: Sync source
+        run: |
+
+          rsync -av \
+          --exclude scripts \
+          --exclude .github \
+          /tmp/omnibot/ ./
+
+
+
+      # ==========================
+      # FLUTTER
+      # ==========================
+
+
+      - name: Flutter dependencies
+        run: |
+
+          if [ -d "ui" ]; then
+
+            cd ui
+            flutter pub get
+
+          else
+
+            flutter pub get
+
+          fi
+
+
+
+      # ==========================
+      # LOCATE GRADLE
+      # ==========================
+
+
+      - name: Find Gradle
+        run: |
+
+          echo "Searching gradlew..."
+
+          find . -name gradlew -type f
+
+
+
+      # ==========================
+      # BUILD
+      # ==========================
+
+
+      - name: Build APK
+        run: |
+
+
+          GRADLE=$(find . -name gradlew -type f | head -1)
+
+
+          if [ -z "$GRADLE" ]; then
+            echo "Gradle not found"
+            exit 1
+          fi
+
+
+          chmod +x $GRADLE
+
+
+          DIR=$(dirname $GRADLE)
+
+
+          cd $DIR
+
+
+          ./gradlew \
+          assembleRelease \
+          --stacktrace
+
+
+
+      # ==========================
+      # FIND APK
+      # ==========================
+
+
+      - name: Locate APK
+        run: |
+
+          echo "APK files:"
+
+          find . -name "*.apk"
+
+
+
+      # ==========================
+      # UPLOAD
+      # ==========================
+
+
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
+
           name: Melly-1.1-release
-          path: app/build/outputs/apk/developStandard/release/app-developStandard-release.apk
+
+          path: |
+            **/*.apk
