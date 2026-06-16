@@ -34,7 +34,7 @@ jobs:
         run: pip install Pillow
 
       # ==================== BRANDING ====================
-      - name: Replace app name in strings.xml
+      - name: Replace app name
         run: |
           python3 scripts/replace_branding.py \
             --app-name "Melly 1.1" \
@@ -73,12 +73,16 @@ jobs:
             --source /tmp/omnibot
 
       # ==================== ARCHITECTURE ====================
-      - name: Apply Mythos-like architecture improvements
+      - name: Apply Mythos architecture
         run: |
           python3 scripts/apply_mythos_arch.py \
             --source /tmp/omnibot
 
       # ==================== BUILD ====================
+      - name: Copy source to workspace (preserve scripts/.github)
+        run: |
+          rsync -a --exclude='scripts/' --exclude='.github/' /tmp/omnibot/ ./
+
       - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
@@ -91,23 +95,17 @@ jobs:
           channel: stable
           cache: true
 
-      - name: Copy source to workspace
-        run: |
-          rsync -a /tmp/omnibot/ ./
-
       - name: Flutter pub get
         run: |
           cd ui
           flutter pub get
 
-      - name: Build APK release
+      - name: Build APK Release (Gradle)
         run: |
-          cd ui
-          flutter build apk --release
+          ./gradlew :app:assembleDevelopStandardRelease -Ptarget=lib/main_standard.dart
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-release
-          path: ui/build/app/outputs/flutter-apk/app-release.apk
- 
+          path: app/build/outputs/apk/developStandard/release/app-developStandard-release.apk
