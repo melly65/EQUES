@@ -1,260 +1,268 @@
 name: Build Melly 1.1 APK
 
 on:
-  push:
-    branches:
-      - main
+push:
+branches:
+- main
 
-  workflow_dispatch:
-    inputs:
-      app_name:
-        description: Nome do app
-        required: false
-        default: "Melly 1.1"
+workflow_dispatch:
+inputs:
+app_name:
+description: Nome do app
+required: false
+default: "Melly 1.1"
 
-      app_name_cn:
-        description: Nome chinês
-        required: false
-        default: "Melly 1.1"
+  app_name_cn:
+    description: Nome chinês
+    required: false
+    default: "Melly 1.1"
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+build:
+runs-on: ubuntu-latest
 
-    steps:
+steps:
 
-      # =========================
-      # CHECKOUT
-      # =========================
+  # =========================
+  # CHECKOUT
+  # =========================
 
-      - name: Checkout Melly repo
-        uses: actions/checkout@v4
+  - name: Checkout Melly repo
+    uses: actions/checkout@v4
 
-      # =========================
-      # CLONE OPENOMNIBOT
-      # =========================
+  # =========================
+  # CLONE OPENOMNIBOT
+  # =========================
 
-      - name: Clone OpenOmniBot
-        run: |
-          git config --global url."https://github.com/".insteadOf git@github.com:
+  - name: Clone OpenOmniBot
+    run: |
+      git config --global url."https://github.com/".insteadOf git@github.com:
 
-          git clone \
-            --depth 1 \
-            https://github.com/omnimind-ai/OpenOmniBot.git \
-            /tmp/omnibot
+      git clone \
+        --depth 1 \
+        https://github.com/omnimind-ai/OpenOmniBot.git \
+        /tmp/omnibot
 
-      - name: Init submodules safely
-        continue-on-error: true
-        run: |
-          cd /tmp/omnibot
+  - name: Init submodules safely
+    continue-on-error: true
+    run: |
+      cd /tmp/omnibot
 
-          git submodule sync || true
+      git submodule sync || true
 
-          git submodule update \
-            --init \
-            --recursive \
-            --depth 1 || true
+      git submodule update \
+        --init \
+        --recursive \
+        --depth 1 || true
 
-      # =========================
-      # ENVIRONMENT
-      # =========================
+  # =========================
+  # ENVIRONMENT
+  # =========================
 
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+  - name: Setup Python
+    uses: actions/setup-python@v5
+    with:
+      python-version: "3.12"
 
-      - name: Install Python dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install Pillow
+  - name: Install Python dependencies
+    run: |
+      python -m pip install --upgrade pip
+      pip install Pillow
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "17"
+  - name: Setup Java 11
+    uses: actions/setup-java@v4
+    with:
+      distribution: temurin
+      java-version: "11"
 
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          channel: stable
-          cache: true
+  - name: Setup Flutter
+    uses: subosito/flutter-action@v2
+    with:
+      channel: stable
+      cache: true
 
-      # =========================
-      # VALIDATE SCRIPTS
-      # =========================
+  # =========================
+  # VALIDATE SCRIPTS
+  # =========================
 
-      - name: Validate scripts
-        run: |
-          echo "Checking available scripts..."
+  - name: Validate scripts
+    run: |
+      echo "Checking available scripts..."
 
-          ls -la || true
-          ls -la scripts || true
+      ls -la || true
+      ls -la scripts || true
 
-          for file in scripts/*.py
-          do
-            if [ -f "$file" ]; then
-              echo "Found: $file"
-            fi
-          done
+      for file in scripts/*.py
+      do
+        if [ -f "$file" ]; then
+          echo "Found: $file"
+        fi
+      done
 
-      # =========================
-      # BRANDING
-      # =========================
+  # =========================
+  # BRANDING
+  # =========================
 
-      - name: Replace branding
-        continue-on-error: true
-        run: |
-          if [ -f scripts/replace_branding.py ]; then
-            python3 scripts/replace_branding.py \
-              --app-name "${{ github.event.inputs.app_name || 'Melly 1.1' }}" \
-              --source /tmp/omnibot
-          else
-            echo "replace_branding.py not found, skipping"
-          fi
+  - name: Replace branding
+    continue-on-error: true
+    run: |
+      if [ -f scripts/replace_branding.py ]; then
+        python3 scripts/replace_branding.py \
+          --app-name "${{ github.event.inputs.app_name || 'Melly 1.1' }}" \
+          --source /tmp/omnibot
+      else
+        echo "replace_branding.py not found, skipping"
+      fi
 
-      - name: Replace package
-        continue-on-error: true
-        run: |
-          if [ -f scripts/replace_package.py ]; then
-            python3 scripts/replace_package.py \
-              --old-package "cn.com.omnimind.bot" \
-              --new-package "br.com.melly.bot" \
-              --source /tmp/omnibot
-          else
-            echo "replace_package.py not found, skipping"
-          fi
+  - name: Replace package
+    continue-on-error: true
+    run: |
+      if [ -f scripts/replace_package.py ]; then
+        python3 scripts/replace_package.py \
+          --old-package "cn.com.omnimind.bot" \
+          --new-package "br.com.melly.bot" \
+          --source /tmp/omnibot
+      else
+        echo "replace_package.py not found, skipping"
+      fi
 
-      - name: Replace greeting
-        continue-on-error: true
-        run: |
-          if [ -f scripts/replace_greeting.py ]; then
-            python3 scripts/replace_greeting.py \
-              --english "Hi 👋, I'm Melly 1.1" \
-              --chinese "你好👋，我是Melly 1.1" \
-              --english-sub "I can help you" \
-              --chinese-sub "我可以帮助你" \
-              --source /tmp/omnibot
-          else
-            echo "replace_greeting.py not found, skipping"
-          fi
+  - name: Replace greeting
+    continue-on-error: true
+    run: |
+      if [ -f scripts/replace_greeting.py ]; then
+        python3 scripts/replace_greeting.py \
+          --english "Hi 👋, I'm Melly 1.1" \
+          --chinese "你好👋，我是Melly 1.1" \
+          --english-sub "I can help you" \
+          --chinese-sub "我可以帮助你" \
+          --source /tmp/omnibot
+      else
+        echo "replace_greeting.py not found, skipping"
+      fi
 
-      # =========================
-      # ICON
-      # =========================
+  # =========================
+  # ICON
+  # =========================
 
-      - name: Generate icon
-        continue-on-error: true
-        run: |
-          if [ -f scripts/generate_icon.py ]; then
-            python3 scripts/generate_icon.py \
-              --name "Melly 1.1" \
-              --color-primary "#6C3CE0" \
-              --color-accent "#00E5FF" \
-              --color-bg "#0A0A1A" \
-              --output-dir /tmp/omnibot/app/src/main/res
-          else
-            echo "generate_icon.py not found, skipping"
-          fi
+  - name: Generate icon
+    continue-on-error: true
+    run: |
+      if [ -f scripts/generate_icon.py ]; then
+        python3 scripts/generate_icon.py \
+          --name "Melly 1.1" \
+          --color-primary "#6C3CE0" \
+          --color-accent "#00E5FF" \
+          --color-bg "#0A0A1A" \
+          --output-dir /tmp/omnibot/app/src/main/res
+      else
+        echo "generate_icon.py not found, skipping"
+      fi
 
-      # =========================
-      # MODIFICATIONS
-      # =========================
+  # =========================
+  # MODIFICATIONS
+  # =========================
 
-      - name: Upgrade API
-        continue-on-error: true
-        run: |
-          if [ -f scripts/upgrade_api.py ]; then
-            python3 scripts/upgrade_api.py \
-              --source /tmp/omnibot
-          else
-            echo "upgrade_api.py not found, skipping"
-          fi
+  - name: Upgrade API
+    continue-on-error: true
+    run: |
+      if [ -f scripts/upgrade_api.py ]; then
+        python3 scripts/upgrade_api.py \
+          --source /tmp/omnibot
+      else
+        echo "upgrade_api.py not found, skipping"
+      fi
 
-      - name: Apply architecture
-        continue-on-error: true
-        run: |
-          if [ -f scripts/apply_mythos_arch.py ]; then
-            python3 scripts/apply_mythos_arch.py \
-              --source /tmp/omnibot
-          else
-            echo "apply_mythos_arch.py not found, skipping"
-          fi
+  - name: Apply architecture
+    continue-on-error: true
+    run: |
+      if [ -f scripts/apply_mythos_arch.py ]; then
+        python3 scripts/apply_mythos_arch.py \
+          --source /tmp/omnibot
+      else
+        echo "apply_mythos_arch.py not found, skipping"
+      fi
 
-      # =========================
-      # COPY SOURCE
-      # =========================
+  # =========================
+  # COPY SOURCE
+  # =========================
 
-      - name: Sync source
-        run: |
-          rsync -av \
-            --exclude scripts \
-            --exclude .github \
-            /tmp/omnibot/ ./
+  - name: Sync source
+    run: |
+      rsync -av \
+        --exclude scripts \
+        --exclude .github \
+        /tmp/omnibot/ ./
 
-      # =========================
-      # FLUTTER
-      # =========================
+  # =========================
+  # FLUTTER
+  # =========================
 
-      - name: Flutter dependencies
-        continue-on-error: true
-        run: |
-          if [ -d "ui" ]; then
-            cd ui
-            flutter pub get
-          else
-            flutter pub get
-          fi
+  - name: Flutter dependencies
+    continue-on-error: true
+    run: |
+      if [ -d "ui" ]; then
+        cd ui
+        flutter pub get
+      else
+        flutter pub get
+      fi
 
-      # =========================
-      # FIND GRADLE
-      # =========================
+  # =========================
+  # FIND GRADLE
+  # =========================
 
-      - name: Locate Gradle
-        run: |
-          echo "Gradle files found:"
-          find . -name gradlew -type f || true
+  - name: Locate Gradle
+    run: |
+      echo "Gradle files found:"
+      find . -name gradlew -type f || true
 
-      # =========================
-      # BUILD APK
-      # =========================
+      echo ""
+      echo "Checking ui/android:"
+      ls -la ui/android || true
 
-      - name: Build APK
-        run: |
-          GRADLE=$(find . -name gradlew -type f | head -1)
+  # =========================
+  # BUILD APK
+  # =========================
 
-          if [ -z "$GRADLE" ]; then
-            echo "No gradle found"
-            exit 1
-          fi
+  - name: Build APK
+    run: |
 
-          chmod +x "$GRADLE"
+      if [ ! -f ui/android/gradlew ]; then
+        echo "ui/android/gradlew not found"
+        exit 1
+      fi
 
-          DIR=$(dirname "$GRADLE")
-          cd "$DIR"
+      chmod +x ui/android/gradlew
 
-          echo "Available assemble tasks:"
-          ./gradlew tasks --all | grep assemble || true
+      cd ui/android
 
-          ./gradlew assembleRelease --stacktrace
+      echo "Java version:"
+      java -version
 
-      # =========================
-      # FIND APK
-      # =========================
+      echo "Gradle version:"
+      ./gradlew --version || true
 
-      - name: Find APK
-        run: |
-          echo "Searching APK files..."
-          find . -name "*.apk" -print
+      echo "Available assemble tasks:"
+      ./gradlew tasks --all | grep assemble || true
 
-      # =========================
-      # UPLOAD
-      # =========================
+      ./gradlew assembleRelease --stacktrace
 
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Melly-1.1-release
-          path: |
-            **/*.apk
+  # =========================
+  # FIND APK
+  # =========================
+
+  - name: Find APK
+    run: |
+      echo "Searching APK files..."
+      find . -name "*.apk" -print
+
+  # =========================
+  # UPLOAD
+  # =========================
+
+  - name: Upload APK
+    uses: actions/upload-artifact@v4
+    with:
+      name: Melly-1.1-release
+      path: |
+        ui/**/build/outputs/**/*.apk
