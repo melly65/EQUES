@@ -88,37 +88,33 @@ jobs:
         working-directory: source/ui
         run: flutter pub get
 
-      - name: Flutter analyze
-        working-directory: source/ui
-        continue-on-error: true
-        run: flutter analyze 2>&1 | tail -50
-
-      - name: Build APK
-        working-directory: source/ui
+      - name: Build APK via Gradle
+        working-directory: source
         run: |
-          flutter build apk --debug -t lib/main_standard.dart -v 2>&1 | tail -200
+          chmod +x gradlew
+          ./gradlew :app:assembleDevelopStandardDebug \
+            --stacktrace \
+            --no-daemon \
+            -Ptarget=lib/main_standard.dart
 
-      - name: Locate APK
+      - name: Locate and upload APK
         run: |
-          echo "=== Procurando APKs em source/ ==="
-          find source -type f -name "*.apk" | sort
-          echo "=== Total ==="
-          find source -type f -name "*.apk" | wc -l
+          echo "=== Buscando APKs em source/ ==="
+          APKS=$(find source -type f -name "*.apk" 2>/dev/null)
+          COUNT=$(echo "$APKS" | wc -l)
+          echo "$APKS" | sort
+          echo "=== Total: $COUNT APK(s) encontrado(s) ==="
+          if [ -z "$APKS" ]; then
+            echo "❌ Nenhum APK gerado!"
+            exit 1
+          fi
+          APK=$(echo "$APKS" | head -1)
+          echo "📦 APK: $APK ($(ls -lh "$APK" | awk '{print $5}'))"
+          echo "apk_path=$APK" >> $GITHUB_ENV
 
-      - name: Upload logs on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: flutter-logs
-          path: |
-            source/ui/.dart_tool
-            source/build/reports
-          if-no-files-found: ignore
-
-      - name: Upload APK
-        if: success()
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
-          path: source/**/*.apk
+          path: ${{ env.apk_path }}
           if-no-files-found: error
