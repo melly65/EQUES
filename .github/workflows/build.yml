@@ -25,7 +25,7 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow -q
 
-      - name: Branding strings
+      - name: Safe branding (visible strings only)
         run: |
           python3 << 'PYEOF'
           import os, re
@@ -37,21 +37,20 @@ jobs:
             c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{name}</string>', c)
             c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{name}</string>', c)
             with open(sp, 'w') as f: f.write(c)
-          for old, new in [('Omnibot',name),('OmniBot',name),('OpenOmniBot',name)]:
-            for r, d, fs in os.walk(src):
-              d[:] = [x for x in d if x not in {'build','.gradle','third_party','.git'}]
-              for fn in fs:
-                if not fn.endswith(('.dart','.kt','.xml','.arb','.html','.json','.yaml','.java')): continue
-                fp = os.path.join(r, fn)
-                try:
-                  with open(fp, 'r', encoding='utf-8', errors='ignore') as f: c = f.read()
-                except: continue
-                if old in c:
-                  with open(fp, 'w', encoding='utf-8') as f: f.write(c.replace(old, new))
           gf = os.path.join(src, 'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart')
           if os.path.exists(gf):
             with open(gf, 'r') as f: c = f.read()
-            with open(gf, 'w') as f: f.write(c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1"))
+            c = c.replace("Hi 👋, I'm Omnibot", "Hi 👋, I'm Melly 1.1")
+            c = c.replace("Hi 👋, I'm OmniBot", "Hi 👋, I'm Melly 1.1")
+            with open(gf, 'w') as f: f.write(c)
+          for root, dirs, files in os.walk(os.path.join(src, 'ui/lib/l10n')):
+            for fn in files:
+              if not fn.endswith('.arb'): continue
+              fp = os.path.join(root, fn)
+              with open(fp, 'r', encoding='utf-8') as f: c = f.read()
+              if 'Omnibot' in c or 'OmniBot' in c or '小万' in c:
+                c = c.replace('Omnibot', name).replace('OmniBot', name).replace('小万', name)
+                with open(fp, 'w', encoding='utf-8') as f: f.write(c)
           PYEOF
 
       - name: Generate icon
@@ -91,15 +90,42 @@ jobs:
         working-directory: source/ui
         run: flutter pub get
 
-      - name: Build APK
-        working-directory: source
+      - name: Flutter analyze
+        working-directory: source/ui
+        continue-on-error: true
+        run: flutter analyze 2>&1 | tail -50
+
+      - name: Build APK (verbose)
+        working-directory: source/ui
         run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleDevelopStandardDebug --stacktrace --no-daemon -Ptarget=lib/main_standard.dart
+          flutter build apk --debug -t lib/main_standard.dart -v 2>&1 | tail -200
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-logs
+          path: |
+            source/ui/.dart_tool
+            source/build/reports
+          if-no-files-found: ignore
+
+      - name: Verify APK
+        if: success()
+        run: |
+          APK="source/ui/build/app/outputs/flutter-apk/app-debug.apk"
+          if [ -f "$APK" ]; then
+            echo "APK encontrado: $(ls -lh "$APK")"
+          else
+            echo "APK nao encontrado"
+            find source -name "*.apk" -type f 2>/dev/null
+            exit 1
+          fi
 
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Melly-1.1-debug
-          path: source/app/build/outputs/apk/developStandard/debug/app-developStandard-debug.apk
+          path: source/ui/build/app/outputs/flutter-apk/app-debug.apk
           if-no-files-found: error
