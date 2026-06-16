@@ -1,0 +1,45 @@
+#!/usr/bin/env python3
+"""Replace all branding strings from OpenOmniBot to Melly 1.1"""
+import os, re, argparse
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--app-name', required=True)
+    parser.add_argument('--source', required=True)
+    args = parser.parse_args()
+    app_name = args.app_name
+    src = args.source
+    branding = [('Omnibot', app_name), ('OmniBot', app_name),
+        ('omnibot', app_name.lower()), ('OMNIBOT', app_name.upper()),
+        ('OpenOmniBot', app_name), ('Open Omnibot', app_name),
+        ('omnimind-ai', 'melly65')]
+    files = ['app/src/main/res/values/strings.xml',
+        'app/src/main/res/values-zh/strings.xml',
+        'ui/lib/features/home/pages/chat/widgets/chat_empty_greeting.dart',
+        'ui/lib/l10n/legacy_text_localizer.dart',
+        'ui/lib/l10n/app_zh.arb', 'ui/lib/l10n/app_en.arb',
+        'ui/lib/l10n/intl_zh.arb', 'ui/lib/l10n/intl_en.arb',
+        'ui/web/index.html', 'ui/web/manifest.json',
+        'ui/pubspec.yaml', 'app/build.gradle.kts', 'settings.gradle.kts']
+    for f in files:
+        fp = os.path.join(src, f)
+        if not os.path.exists(fp): continue
+        with open(fp, 'r', encoding='utf-8') as fh:
+            content = fh.read()
+        modified = False
+        for old, new in branding:
+            if old in content:
+                content = content.replace(old, new); modified = True
+        if modified:
+            with open(fp, 'w', encoding='utf-8') as fh: fh.write(content)
+            print(f"  [OK] {f}")
+    sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
+    if os.path.exists(sp):
+        with open(sp, 'r', encoding='utf-8') as f: c = f.read()
+        c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{app_name}</string>', c)
+        c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{app_name}</string>', c)
+        with open(sp, 'w', encoding='utf-8') as f: f.write(c)
+    print(f"\n✅ Branding: '{app_name}'")
+
+if __name__ == '__main__':
+    main()
