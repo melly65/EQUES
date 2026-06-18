@@ -25,107 +25,72 @@ jobs:
       - name: Install Pillow
         run: pip install Pillow -q
 
-      - name: Rebranding (safe mode)
+      - name: Rebranding Melly 1.1
         run: |
-          python3 << 'PYEOF'
-          import os, re, glob
+          python3 <<'PYEOF'
+          import os, re
           from PIL import Image, ImageDraw
 
-          src = 'source'
-          name = 'Melly 1.1'
+          src="source"
+          replacements = {
+              "Omnibot":"Melly 1.1",
+              "OmniBot":"Melly 1.1",
+              "Hi 👋, I'm Omnibot":"Olá 👋, sou Melly 1.1",
+              "Hi 👋, I'm OmniBot":"Olá 👋, sou Melly 1.1",
+              "Your AI assistant, always ready":"Sua assistente virtual inteligente",
+              "Your AI assistant":"Sua assistente virtual inteligente",
+          }
 
-          # ── 1. STRINGS.XML ──
-          sp = os.path.join(src, 'app/src/main/res/values/strings.xml')
-          if os.path.exists(sp):
-            with open(sp, 'r') as f: c = f.read()
-            c = re.sub(r'<string name="app_name">[^<]+</string>', f'<string name="app_name">{name}</string>', c)
-            c = re.sub(r'<string name="omni_app_name">[^<]+</string>', f'<string name="omni_app_name">{name}</string>', c)
-            with open(sp, 'w') as f: f.write(c)
+          # XML e ARB: replace direto (seguro, são dados)
+          for root,_,files in os.walk(src):
+              for file in files:
+                  if not (file.endswith(".xml") or file.endswith(".arb")): continue
+                  path=os.path.join(root,file)
+                  try: text=open(path,encoding="utf-8").read()
+                  except: continue
+                  old=text
+                  for a,b in replacements.items(): text=text.replace(a,b)
+                  if text!=old: open(path,"w",encoding="utf-8").write(text)
 
-          # ── 2. ANDROIDMANIFEST.XML ──
-          manif = os.path.join(src, 'app/src/main/AndroidManifest.xml')
-          if os.path.exists(manif):
-            with open(manif, 'r') as f: c = f.read()
-            c = re.sub(r'android:label="[^"]*"', 'android:label="Melly 1.1"', c)
-            with open(manif, 'w') as f: f.write(c)
+          # DART: só dentro de strings (NUNCA em nomes de classe/variável)
+          for root,_,files in os.walk(src):
+              if "build" in root or ".git" in root: continue
+              for file in files:
+                  if not file.endswith(".dart"): continue
+                  path=os.path.join(root,file)
+                  try: text=open(path,encoding="utf-8").read()
+                  except: continue
+                  old=text
+                  text=re.sub(
+                      r'(["\'])(.*?)(["\'])',
+                      lambda m: m.group(1) +
+                      m.group(2)
+                      .replace("OmniBot","Melly 1.1")
+                      .replace("Omnibot","Melly 1.1")
+                      .replace("Your AI assistant","Sua assistente virtual inteligente")
+                      + m.group(3),
+                      text
+                  )
+                  if text!=old: open(path,"w",encoding="utf-8").write(text)
 
-          # ── 3. ARQUIVOS .dart → SOMENTE strings entre aspas ──
-          dart_files = []
-          for root, dirs, files in os.walk(os.path.join(src, 'ui/lib')):
-            if any(s in root for s in ['.dart_tool', 'build', '.git']): continue
-            for fn in files:
-              if fn.endswith('.dart'): dart_files.append(os.path.join(root, fn))
-          for dp in dart_files:
-            try:
-              with open(dp, 'r', encoding='utf-8', errors='ignore') as f: c = f.read()
-            except: continue
-            orig = c
-            c = re.sub(r"(['\"`])Omnibot(['\"`])", r'\1Melly 1.1\2', c)
-            c = re.sub(r"(['\"`])OmniBot(['\"`])", r'\1Melly 1.1\2', c)
-            c = re.sub(r"(['\"`])Hi 👋, I'm Omnibot(['\"`])", r"\1Olá 👋, sou Melly 1.1\2", c)
-            c = re.sub(r"(['\"`])Hi 👋, I'm OmniBot(['\"`])", r"\1Olá 👋, sou Melly 1.1\2", c)
-            c = re.sub(r"(['\"`])Your AI assistant, always ready(['\"`])", r"\1Sua assistente virtual inteligente\2", c)
-            c = re.sub(r"(['\"`])Your AI assistant(['\"`])", r"\1Sua assistente virtual inteligente\2", c)
-            if c != orig:
-              with open(dp, 'w', encoding='utf-8') as f: f.write(c)
+          # ÍCONE
+          def icon(size):
+              img=Image.new("RGBA",(size,size),(0,0,0,0))
+              d=ImageDraw.Draw(img)
+              w=size//8
+              d.line([(size//3,size//4),(size//2,size//2),(size//3,size*3//4)], fill=(0,229,255), width=w)
+              d.line([(size*2//3,size//4),(size//2,size//2),(size*2//3,size*3//4)], fill=(0,229,255), width=w)
+              return img
+          for folder,size in {"mipmap-mdpi":48,"mipmap-hdpi":72,"mipmap-xhdpi":96,"mipmap-xxhdpi":144,"mipmap-xxxhdpi":192}.items():
+              out=f"{src}/app/src/main/res/{folder}"
+              os.makedirs(out,exist_ok=True)
+              icon(size).save(f"{out}/ic_launcher.png")
+          for sd in ["mipmap-anydpi-v26","drawable-anydpi-v26"]:
+              for fn in ["ic_launcher.xml","ic_launcher_round.xml"]:
+                  p=os.path.join(src,"app/src/main/res",sd,fn)
+                  if os.path.exists(p): os.remove(p)
 
-          # ── 4. ARQUIVOS .arb ──
-          for root, dirs, files in os.walk(os.path.join(src, 'ui/lib/l10n')):
-            for fn in files:
-              if not fn.endswith('.arb'): continue
-              fp = os.path.join(root, fn)
-              with open(fp, 'r', encoding='utf-8') as f: c = f.read()
-              orig = c
-              c = c.replace('Omnibot', name).replace('OmniBot', name).replace('小万', name)
-              c = c.replace("Hi 👋, I'm Omnibot", "Olá 👋, sou Melly 1.1")
-              c = c.replace("Hi 👋, I'm OmniBot", "Olá 👋, sou Melly 1.1")
-              c = c.replace("Your AI assistant, always ready", "Sua assistente virtual inteligente")
-              c = c.replace("Your AI assistant", "Sua assistente virtual inteligente")
-              if c != orig:
-                with open(fp, 'w', encoding='utf-8') as f: f.write(c)
-
-          # ── 5. ARQUIVOS .json ──
-          for root, dirs, files in os.walk(os.path.join(src, 'ui')):
-            for fn in files:
-              if not fn.endswith('.json') or 'build' in root: continue
-              fp = os.path.join(root, fn)
-              with open(fp, 'r', encoding='utf-8') as f: c = f.read()
-              orig = c
-              c = c.replace('Omnibot', name).replace('OmniBot', name)
-              if c != orig:
-                with open(fp, 'w', encoding='utf-8') as f: f.write(c)
-
-          # ── 6. GERAR ÍCONE ──
-          def make_icon(size):
-            img = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-            d = ImageDraw.Draw(img)
-            m = size // 8
-            d.rounded_rectangle([m, m, size-m, size-m], radius=size//4, fill=(10, 10, 26, 255))
-            cx, cy, sz, w = size//2, size//2, size//5, max(4, size//12)
-            pts = [(cx-sz-w, cy-sz), (cx+sz-w, cy), (cx-sz-w, cy+sz),
-                   (cx-sz+w, cy-sz), (cx+sz+w, cy), (cx-sz+w, cy+sz)]
-            d.line(pts[:3], fill=(0, 229, 255, 255), width=w)
-            d.line(pts[3:], fill=(0, 229, 255, 255), width=w)
-            return img
-          for dn, s in {'mipmap-mdpi':48,'mipmap-hdpi':72,'mipmap-xhdpi':96,'mipmap-xxhdpi':144,'mipmap-xxxhdpi':192}.items():
-            od = os.path.join(src, 'app/src/main/res', dn)
-            os.makedirs(od, exist_ok=True)
-            make_icon(s).save(os.path.join(od, 'ic_launcher.png'), 'PNG')
-          for sd in ['mipmap-anydpi-v26', 'drawable-anydpi-v26']:
-            for fn in ['ic_launcher.xml', 'ic_launcher_round.xml']:
-              p = os.path.join(src, 'app/src/main/res', sd, fn)
-              if os.path.exists(p): os.remove(p)
-
-          # ── 7. IMAGENS EM ASSETS ── só PNG/WEBP/JPG/SVG
-          for pat in ['**/assets/**/*.png', '**/assets/**/*.webp', '**/assets/**/*.jpg',
-                      '**/assets/**/*.svg', '**/drawable/*.png']:
-            for fp in glob.glob(os.path.join(src, pat), recursive=True):
-              if any(s in fp for s in ['.dart_tool', '/build/', '.git', 'ic_launcher']): continue
-              if fp.endswith('.xml'): continue
-              try: make_icon(200).save(fp, 'PNG')
-              except: pass
-
-          print('✅ Rebranding completo — codigo nao quebrado')
+          print("Melly rebrand OK")
           PYEOF
 
       - name: Setup Java 17
